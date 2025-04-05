@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Javelin Throwing Game</title>
+  <style>
+    body {
+      margin: 0;
+      background: #eef;
+      font-family: sans-serif;
+      text-align: center;
+    }
+    canvas {
+      background: #cce;
+      display: block;
+      margin: 20px auto;
+      border: 2px solid #333;
+    }
+    #result {
+      font-size: 20px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="400"></canvas>
+  <div id="result"></div>
+
+  <script>
+    // Canvas setup
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Game constants and settings
+    const groundY = 350;                // y-coordinate of ground
+    const lineX = 400;                  // x-coordinate of the throwing line (drawn in red)
+    const playerSpeed = 100;            // player running speed in pixels/sec
+    const throwSpeed = 500;             // throw speed component (added to player speed) in pixels/sec
+    const gravity = 600;                // gravitational acceleration (pixels/sec^2)
+    const minAngle = 20 * Math.PI/180;   // minimum throw angle (in radians)
+    const maxAngle = 60 * Math.PI/180;   // maximum throw angle (in radians)
+    const maxHoldTime = 2000;           // max time (ms) that affects the angle
+    
+    // Game state variables
+    let gameState = "aiming";           // "aiming", "thrown", "landed", "foul"
+    let player = { x: 100, y: groundY };
+    let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
+    
+    // Input control variables
+    let spacePressed = false;
+    let holdStartTime = 0;
+    let holdDuration = 0;
+    
+    // Time tracking for animation
+    let lastTime = 0;
+    
+    // Main game loop
+    function gameLoop(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      
+      update(dt);
+      draw();
+      
+      requestAnimationFrame(gameLoop);
+    }
+    requestAnimationFrame(gameLoop);
+    
+    // Update game state
+    function update(dt) {
+      if (gameState === "aiming") {
+        // Move player forward continuously.
+        player.x += playerSpeed * dt;
+        
+        // If the spacebar is held, update how long it’s been held.
+        if (spacePressed) {
+          holdDuration = performance.now() - holdStartTime;
+          // If the player crosses the throwing line while still holding, it’s a foul.
+          if (player.x > lineX) {
+            gameState = "foul";
+            document.getElementById("result").innerText = "Foul! You threw after crossing the line. Press R to restart.";
+          }
+        }
+      }
+      else if (gameState === "thrown") {
+        // Update the javelin’s physics.
+        javelin.vy += gravity * dt;
+        javelin.x += javelin.vx * dt;
+        javelin.y += javelin.vy * dt;
+        
+        // When the javelin hits the ground, end the throw.
+        if (javelin.y >= groundY) {
+          javelin.y = groundY;  // Clamp to the ground.
+          gameState = "landed";
+          // Distance measured from the throwing line.
+          const distance = javelin.x - lineX;
+          document.getElementById("result").innerText = "Distance: " + Math.round(distance) + " pixels. Press R to restart.";
+        }
+      }
+      // In "foul" and "landed" states, we wait for the user to press R to restart.
+    }
+    
+    // Draw game elements
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw ground.
+      ctx.fillStyle = "#654321";
+      ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+      
+      // Draw the throwing line.
+      ctx.strokeStyle = "red";
+      ctx.beginPath();
+      ctx.moveTo(lineX, 0);
+      ctx.lineTo(lineX, canvas.height);
+      ctx.stroke();
+      
+      // Draw player (and javelin in aiming mode).
+      if (gameState === "aiming" || gameState === "foul") {
+        // Draw player as a blue circle.
+        ctx.fillStyle = "blue";
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, 10, 0, Math.PI*2);
+        ctx.fill();
+        
+        // Determine javelin angle based on hold duration.
+        let angle = minAngle;
+        if (spacePressed) {
+          const angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+          angle = minAngle + (maxAngle - minAngle) * angleFactor;
+        }
+        // Draw the javelin attached to the player (offset above the player).
+        drawJavelin(player.x, player.y - 10, angle);
+        
+        // When space is held, show a dotted trajectory preview.
+        if (spacePressed) {
+          const initVx = playerSpeed + throwSpeed * Math.cos(angle);
+          const initVy = - throwSpeed * Math.sin(angle);
+          drawPreviewTrajectory(player.x, player.y - 10, initVx, initVy);
+        }
+      }
+      else if (gameState === "thrown" || gameState === "landed") {
+        // Compute angle from current javelin velocity.
+        const angle = Math.atan2(javelin.vy, javelin.vx);
+        drawJavelin(javelin.x, javelin.y, angle);
+      }
+    }
+    
+    // Draw the javelin as a simple line.
+    function drawJavelin(x, y, angle) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(40, 0); // Javelin length.
+      ctx.stroke();
+      ctx.restore();
+    }
+    
+    // Draw a dotted trajectory preview (using simple projectile motion).
+    function drawPreviewTrajectory(x, y, vx, vy) {
+      ctx.save();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = "gray";
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      let t = 0;
+      const dt = 0.1;
+      let previewX = x;
+      let previewY = y;
+      // Draw the preview until the trajectory would hit the ground or after 5 seconds.
+      while (previewY < groundY && t < 5) {
+        t += dt;
+        previewX = x + vx * t;
+        previewY = y + vy * t + 0.5 * gravity * t * t;
+        ctx.lineTo(previewX, previewY);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    
+    // Input event listeners.
+    document.addEventListener('keydown', function(e) {
+      if (e.code === "Space") {
+        if (gameState === "aiming" && !spacePressed) {
+          spacePressed = true;
+          holdStartTime = performance.now();
+          holdDuration = 0;
+        }
+      }
+      // Reset the game when R is pressed.
+      if (e.code === "KeyR") {
+        resetGame();
+      }
+    });
+    
+    document.addEventListener('keyup', function(e) {
+      if (e.code === "Space") {
+        if (gameState === "aiming" && spacePressed) {
+          spacePressed = false;
+          // Calculate the current angle based on how long the spacebar was held.
+          const angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+          const angle = minAngle + (maxAngle - minAngle) * angleFactor;
+          // Set the javelin’s starting position (from the player’s hand).
+          javelin.x = player.x;
+          javelin.y = player.y - 10;
+          // The initial velocity combines the player’s running speed with the throw speed.
+          javelin.vx = playerSpeed + throwSpeed * Math.cos(angle);
+          javelin.vy = - throwSpeed * Math.sin(angle);
+          // Transition to the thrown state.
+          gameState = "thrown";
+        }
+      }
+    });
+    
+    // Reset the game to initial conditions.
+    function resetGame() {
+      gameState = "aiming";
+      player.x = 100;
+      javelin = { x: 0, y: 0, vx: 0, vy: 0 };
+      spacePressed = false;
+      holdDuration = 0;
+      holdStartTime = 0;
+      document.getElementById("result").innerText = "";
+    }
+  </script>
+</body>
+</html>
