@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Game - Realistic Field & Smooth Zoom</title>
+  <title>Javelin Throwing Game – Camera Transitions & Visible Preview Dots</title>
   <style>
     body {
       margin: 0;
@@ -29,72 +29,116 @@
   <div id="result"></div>
   
   <script>
-    // === Constants & Settings ===
+    // === Canvas & Context ===
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    // Field and scaling constants
-    const fieldWidth = 120;           // Field width in meters (realistic field)
-    const bottomMargin = 40;          // For drawing the ground and meter markings
-    const initialScale = canvas.width / fieldWidth; // Full-field view scale
-    const finalScale = 50;            // Running view: 1 m = 50 pixels
+    // === Field & Scaling Constants ===
+    const fieldWidth = 120;            // Field width in meters (realistic field)
+    const bottomMargin = 40;           // Space at bottom for ground & meter markings
+    const initialScale = canvas.width / fieldWidth; // Full–field view scale
+    const finalScale = 50;             // Running view: 1 m = 50 pixels
+    // For aiming, use an intermediate scale so that preview dots aren’t off–screen.
+    const aimScale = (initialScale + finalScale) / 2;
     
-    // Transition (zoom in) settings
-    const transitionDuration = 1000;  // ms duration for the zoom transition
-    let transitionStartTime = null;
-    let initialCameraX = 0;
-    let finalCameraX = null;          // computed when transition starts
+    // === Transition Durations (ms) ===
+    const startTransitionDuration = 1000;  // Zoom in from full field to running view at start
+    const landingTransitionDurationOut = 1000; // Zoom out after throw (to full field view)
+    const landingTransitionDurationIn = 1000;  // Then zoom in on the landing spot
     
-    // World physics (SI units)
-    const gravity = -9.81;            // m/s² (negative means downward acceleration)
-    const playerSpeed = 7;            // m/s
-    const throwSpeed = 30;            // m/s
-    const minAngle = 20 * Math.PI/180;  // radians
-    const maxAngle = 60 * Math.PI/180;  // radians
-    const maxHoldTime = 2000;         // ms maximum for aiming
-    
-    // === Game States ===
-    // "ready": full-field view, waiting to start.
-    // "transition": smooth zoom from full-field view into running view.
-    // "running": player is moving with a scrolling view.
-    // "aiming": holding Space to aim (preview dots appear).
-    // "thrown": javelin in flight.
-    // "landed": javelin has hit the ground.
-    // "foul": foul (player crossed the throwing line without releasing).
+    // === Global State & Timing Variables ===
+    // Game states:
+    // "ready": full field view waiting to start.
+    // "startTransition": zooming in to running view.
+    // "running": player is moving (camera centered on player, zoomed in).
+    // "aiming": player holding Space to aim (using aimScale).
+    // "thrown": javelin in flight (player movement frozen).
+    // "landingZoomOut": after landing, camera zooms out to full field.
+    // "landingZoomIn": then camera zooms in on landing spot.
+    // "landed": final view (zoomed in on landing spot) with result.
+    // "foul": foul (crossed throwing line without throwing).
     let gameState = "ready";
     let resultText = "Press Space to start running (full field view).";
     
-    // === World Objects ===
-    let player = { x: 0, y: 0 };      // Starting at 0 m; ground is y = 0.
-    const playerRadius = 0.3;         // Player drawn as a circle (meters)
+    // Timing variables for transitions
+    let transitionStartTime = null;    // For startTransition
+    let landingTransitionStartTime = null; // For landing transitions
+    // For landing zoom out, store starting parameters:
+    let zoomOutStartScale = null;
+    let zoomOutStartCameraX = null;
+    // For landing zoom in, store the desired landing cameraX:
+    let landingCameraX = null;
     
-    // Foul (throwing) line in meters (realistic value)
-    const foulLineX = 30;           // m – must throw before crossing this line
+    // === World Physics (SI units) ===
+    const gravity = -9.81;           // m/s² (negative = downward)
+    const playerSpeed = 7;           // m/s
+    const throwSpeed = 30;           // m/s
+    const minAngle = 20 * Math.PI/180; // radians
+    const maxAngle = 60 * Math.PI/180; // radians
+    const maxHoldTime = 2000;        // ms maximum for aiming
+    
+    // === World Objects ===
+    // Player starts at 0 m (ground is y = 0)
+    let player = { x: 0, y: 0 };
+    const playerRadius = 0.3;        // meters (for drawing as circle)
+    // Foul (throwing) line – must throw before crossing this x (meters)
+    const foulLineX = 30;
     
     // Javelin properties
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
-    const javelinLength = 1.2;        // meters
+    const javelinLength = 1.2;       // meters
     
-    // === Input Control ===
+    // When throw is made, freeze player’s x (for camera)
+    let frozenPlayerX = 0;
+    
+    // === Input Control Variables ===
     let spacePressed = false;
     let holdStartTime = 0;
     let holdDuration = 0;
     
-    // --- Camera and Scaling ---
+    // === Camera & View Function ===
     // getCameraAndScale returns the current scale and cameraX (left edge of view in world coordinates)
     function getCameraAndScale() {
       let scale, cameraX;
       if (gameState === "ready") {
         scale = initialScale;
         cameraX = 0;
-      } else if (gameState === "transition") {
+      } else if (gameState === "startTransition") {
         let elapsed = performance.now() - transitionStartTime;
-        let fraction = Math.min(elapsed / transitionDuration, 1);
+        let fraction = Math.min(elapsed / startTransitionDuration, 1);
+        // Transition from full-field view to running view.
         scale = initialScale + fraction * (finalScale - initialScale);
-        cameraX = initialCameraX + fraction * (finalCameraX - initialCameraX);
-      } else { // running, aiming, thrown, landed, foul
+        // In full-field view, cameraX = 0; in running view, cameraX centers on player.
+        let runningCameraX = player.x - (canvas.width / (2 * finalScale));
+        cameraX = 0 + fraction * (runningCameraX - 0);
+      } else if (gameState === "running") {
         scale = finalScale;
         cameraX = player.x - (canvas.width / (2 * finalScale));
+      } else if (gameState === "aiming") {
+        scale = aimScale;
+        cameraX = player.x - (canvas.width / (2 * aimScale));
+      } else if (gameState === "thrown") {
+        // Freeze view based on frozenPlayerX.
+        scale = finalScale;
+        cameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
+      } else if (gameState === "landingZoomOut") {
+        let elapsed = performance.now() - landingTransitionStartTime;
+        let fraction = Math.min(elapsed / landingTransitionDurationOut, 1);
+        scale = (1 - fraction) * zoomOutStartScale + fraction * initialScale;
+        cameraX = (1 - fraction) * zoomOutStartCameraX + fraction * 0;
+      } else if (gameState === "landingZoomIn") {
+        let elapsed = performance.now() - landingTransitionStartTime;
+        let fraction = Math.min(elapsed / landingTransitionDurationIn, 1);
+        scale = (1 - fraction) * initialScale + fraction * finalScale;
+        cameraX = (1 - fraction) * 0 + fraction * landingCameraX;
+      } else if (gameState === "landed") {
+        // Final view: zoomed in on landing spot.
+        scale = finalScale;
+        cameraX = landingCameraX;
+      } else if (gameState === "foul") {
+        // For foul, use running view.
+        scale = finalScale;
+        cameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
       }
       return { scale, cameraX };
     }
@@ -107,12 +151,12 @@
       return { screenX, screenY };
     }
     
-    // --- Draw Meter Markings ---
-    // Draw tick marks every 5 meters along the ground.
+    // === Draw Meter Markings (every 5 meters) ===
     function drawMeterMarkings(cameraX, scale) {
       ctx.fillStyle = "black";
       ctx.strokeStyle = "black";
       ctx.font = "12px Arial";
+      // Compute marks from the visible range.
       let startMark = Math.ceil(cameraX / 5) * 5;
       let endMark = Math.floor((cameraX + canvas.width / scale) / 5) * 5;
       for (let m = startMark; m <= endMark; m += 5) {
@@ -129,7 +173,7 @@
     let lastTime = 0;
     function gameLoop(timestamp) {
       if (!lastTime) lastTime = timestamp;
-      const dt = (timestamp - lastTime) / 1000; // in seconds
+      const dt = (timestamp - lastTime) / 1000;
       lastTime = timestamp;
       
       update(dt);
@@ -142,16 +186,22 @@
     
     // === Update Game State ===
     function update(dt) {
-      if (gameState === "transition" || gameState === "running" || gameState === "aiming") {
-        // Player runs forward.
+      if (gameState === "startTransition") {
+        // Transition from full field view to running view.
+        let elapsed = performance.now() - transitionStartTime;
+        if (elapsed >= startTransitionDuration) {
+          gameState = "running";
+        }
+      }
+      
+      if (gameState === "running" || gameState === "aiming") {
+        // Move player forward.
         player.x += playerSpeed * dt;
-        
-        // Foul check: if player crosses foul line before throwing.
-        if (player.x > foulLineX && gameState !== "thrown" && gameState !== "landed") {
+        // Check for foul (if player crosses throwing line without throwing).
+        if (player.x > foulLineX) {
           gameState = "foul";
           resultText = "Foul! You crossed the line without throwing. Press R to restart.";
         }
-        
         if (gameState === "aiming" && spacePressed) {
           holdDuration = performance.now() - holdStartTime;
         }
@@ -160,21 +210,31 @@
         javelin.vy += gravity * dt;
         javelin.x += javelin.vx * dt;
         javelin.y += javelin.vy * dt;
-        
         // When javelin hits the ground.
         if (javelin.y <= 0) {
           javelin.y = 0;
+          // Begin landing zoom-out transition.
+          gameState = "landingZoomOut";
+          landingTransitionStartTime = performance.now();
+          // Use the frozen view parameters as starting point.
+          zoomOutStartScale = finalScale;
+          zoomOutStartCameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
+        }
+      } else if (gameState === "landingZoomOut") {
+        let elapsed = performance.now() - landingTransitionStartTime;
+        if (elapsed >= landingTransitionDurationOut) {
+          // Start zooming in on landing spot.
+          gameState = "landingZoomIn";
+          landingTransitionStartTime = performance.now();
+          // Desired final camera: center on the javelin landing spot.
+          landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
+        }
+      } else if (gameState === "landingZoomIn") {
+        let elapsed = performance.now() - landingTransitionStartTime;
+        if (elapsed >= landingTransitionDurationIn) {
           gameState = "landed";
           let distance = javelin.x - foulLineX;
           resultText = "Distance: " + distance.toFixed(2) + " m. Press R to restart.";
-        }
-      }
-      
-      // Handle zoom transition.
-      if (gameState === "transition") {
-        let elapsed = performance.now() - transitionStartTime;
-        if (elapsed >= transitionDuration) {
-          gameState = "running";
         }
       }
     }
@@ -186,7 +246,7 @@
       // Clear canvas.
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Draw sky gradient.
+      // Draw sky background gradient.
       let skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
       skyGradient.addColorStop(0, "#87CEEB");
       skyGradient.addColorStop(1, "#B0E0E6");
@@ -200,7 +260,7 @@
       // Draw meter markings.
       drawMeterMarkings(cameraX, scale);
       
-      // Draw foul line.
+      // Draw foul (throwing) line.
       let foulScreen = worldToScreen(foulLineX, 0);
       ctx.strokeStyle = "red";
       ctx.lineWidth = 3;
@@ -209,14 +269,15 @@
       ctx.lineTo(foulScreen.screenX, canvas.height);
       ctx.stroke();
       
-      // --- Preview Dots for Aiming ---
+      // --- Preview Dots in Aiming Mode ---
       if (gameState === "aiming" && spacePressed) {
         let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
         let angle = minAngle + (maxAngle - minAngle) * angleFactor;
+        // Initial velocity for the preview.
         let initVx = playerSpeed + throwSpeed * Math.cos(angle);
         let initVy = throwSpeed * Math.sin(angle);
         let startX = player.x;
-        let startY = player.y + 0.5; // javelin's starting height (meters)
+        let startY = player.y + 0.5; // javelin starting height (m)
         let numDots = 5;
         let dotInterval = 0.3; // seconds between dots
         ctx.fillStyle = "black";
@@ -226,7 +287,7 @@
           let dotY = startY + initVy * t + 0.5 * gravity * t * t;
           if (dotY < 0) break;
           let pos = worldToScreen(dotX, dotY);
-          let dotRadius = 0.1 * scale; // 0.1 m dot scaled to pixels
+          let dotRadius = 0.1 * scale; // 0.1 m dot radius scaled to pixels
           ctx.beginPath();
           ctx.arc(pos.screenX, pos.screenY, dotRadius, 0, Math.PI * 2);
           ctx.fill();
@@ -234,11 +295,14 @@
       }
       
       // --- Draw the Player ---
-      let playerScreen = worldToScreen(player.x, player.y);
-      ctx.fillStyle = "#0000FF";
-      ctx.beginPath();
-      ctx.arc(playerScreen.screenX, playerScreen.screenY, playerRadius * scale, 0, Math.PI * 2);
-      ctx.fill();
+      // Only draw player if not frozen by throw.
+      if (gameState !== "thrown") {
+        let playerScreen = worldToScreen(player.x, player.y);
+        ctx.fillStyle = "#0000FF";
+        ctx.beginPath();
+        ctx.arc(playerScreen.screenX, playerScreen.screenY, playerRadius * scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
       
       // --- Draw the Javelin ---
       if (gameState === "aiming") {
@@ -255,7 +319,8 @@
         ctx.lineTo(javelinLength * scale, 0);
         ctx.stroke();
         ctx.restore();
-      } else if (gameState === "thrown" || gameState === "landed") {
+      } else if (gameState === "thrown" || gameState === "landingZoomOut" ||
+                 gameState === "landingZoomIn" || gameState === "landed") {
         let pos = worldToScreen(javelin.x, javelin.y);
         let angle = Math.atan2(javelin.vy, javelin.vx);
         ctx.save();
@@ -270,7 +335,7 @@
         ctx.restore();
       }
       
-      // Optional: In ready state, draw a border to emphasize full-field view.
+      // In the ready state, optionally draw a border.
       if (gameState === "ready") {
         ctx.strokeStyle = "black";
         ctx.lineWidth = 2;
@@ -282,11 +347,9 @@
     document.addEventListener('keydown', function(e) {
       if (e.code === "Space") {
         if (gameState === "ready") {
-          // Begin smooth zoom transition and start running.
-          gameState = "transition";
+          // Start the smooth zoom transition into running view.
+          gameState = "startTransition";
           transitionStartTime = performance.now();
-          initialCameraX = 0;
-          finalCameraX = player.x - (canvas.width / (2 * finalScale));
           resultText = "";
         } else if (gameState === "running") {
           // Enter aiming mode.
@@ -312,6 +375,8 @@
           javelin.y = player.y + 0.5;
           javelin.vx = playerSpeed + throwSpeed * Math.cos(angle);
           javelin.vy = throwSpeed * Math.sin(angle);
+          // Freeze the player's position at the moment of throw.
+          frozenPlayerX = player.x;
           gameState = "thrown";
         }
       }
@@ -324,10 +389,12 @@
       player.x = 0;
       player.y = 0;
       javelin = { x: 0, y: 0, vx: 0, vy: 0 };
+      frozenPlayerX = 0;
       spacePressed = false;
       holdDuration = 0;
       holdStartTime = 0;
       transitionStartTime = null;
+      landingTransitionStartTime = null;
     }
   </script>
 </body>
