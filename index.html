@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Game – Flight Zoom & Landing Zoom</title>
+  <title>Javelin Throwing Game – Flight Zoom & Landing Zoom (Revised)</title>
   <style>
     body {
       margin: 0;
@@ -36,14 +36,14 @@
     // === Field & Scaling Constants ===
     const fieldWidth = 120;            // Field width in meters (realistic field)
     const bottomMargin = 40;           // Space at bottom for ground & meter markings
-    const initialScale = canvas.width / fieldWidth; // Full-field view scale
-    const finalScale = 50;             // Running view: 1 m = 50 pixels
-    // For aiming, use an intermediate scale so that preview dots are visible.
+    const initialScale = canvas.width / fieldWidth; // Full-field view scale (zoomed out)
+    const finalScale = 50;             // Running view: 1 m = 50 pixels (zoomed in)
+    // For aiming, use an intermediate scale so that preview dots are clearly visible.
     const aimScale = (initialScale + finalScale) / 2;
     
-    // === Transition Durations (ms) ===
+    // === Transition Durations (in ms) ===
     const startTransitionDuration = 1000;       // Zoom in from full field to running view at start
-    const flightTransitionDuration = 1000;        // Zoom out from running view to full field right after throw
+    const flightTransitionDuration = 1000;        // Zoom out from running view to full-field view after throw
     const landingTransitionDurationIn = 1000;     // Zoom in on landing spot after flight
     
     // === Global State & Timing Variables ===
@@ -53,7 +53,7 @@
     // "running": player is moving (camera centered on player, zoomed in).
     // "aiming": player holding Space to aim (using aimScale).
     // "flightZoomOut": immediately after throw, zooming out to full-field view.
-    // "thrown": javelin in flight, shown in full-field view.
+    // "thrown": javelin in flight in full-field view (camera scrolls with the javelin).
     // "landingZoomIn": after landing, zooming in on the landing spot.
     // "landed": final view (zoomed in on landing spot) with result.
     // "foul": foul (crossed throwing line without throwing).
@@ -64,7 +64,10 @@
     let transitionStartTime = null;         // For startTransition
     let flightTransitionStartTime = null;     // For flightZoomOut
     let landingTransitionStartTime = null;    // For landingZoomIn
-    // For landing zoom, store desired landing cameraX.
+    
+    // For landing zoom interpolation.
+    let landingZoomStartCameraX = null;
+    let landingZoomStartScale = null;
     let landingCameraX = null;
     
     // === World Physics (SI units) ===
@@ -86,7 +89,7 @@
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
     const javelinLength = 1.2;       // meters
     
-    // When throw is made, freeze player’s x (for camera)
+    // When throw is made, freeze player’s x (for camera reference)
     let frozenPlayerX = 0;
     
     // === Input Control Variables ===
@@ -105,9 +108,9 @@
         let elapsed = performance.now() - transitionStartTime;
         let fraction = Math.min(elapsed / startTransitionDuration, 1);
         scale = initialScale + fraction * (finalScale - initialScale);
-        // In full-field view, cameraX = 0; in running view, center on player.
+        // Transition camera: from full-field (cameraX = 0) to running view (center on player)
         let runningCameraX = player.x - (canvas.width / (2 * finalScale));
-        cameraX = 0 + fraction * (runningCameraX - 0);
+        cameraX = fraction * runningCameraX;
       } else if (gameState === "running") {
         scale = finalScale;
         cameraX = player.x - (canvas.width / (2 * finalScale));
@@ -117,23 +120,21 @@
       } else if (gameState === "flightZoomOut") {
         let elapsed = performance.now() - flightTransitionStartTime;
         let fraction = Math.min(elapsed / flightTransitionDuration, 1);
-        // Transition from running view (finalScale) to full-field view (initialScale)
+        // Transition from running view to full-field view.
         scale = finalScale + fraction * (initialScale - finalScale);
-        // In running view, camera is centered on frozenPlayerX.
         let runningCameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
-        // In full-field view, cameraX = 0.
-        cameraX = runningCameraX + fraction * (0 - runningCameraX);
+        // In full-field view, we want the camera to scroll with the javelin.
+        let fullFieldCameraX = javelin.x - (canvas.width / (2 * initialScale));
+        cameraX = runningCameraX + fraction * (fullFieldCameraX - runningCameraX);
       } else if (gameState === "thrown") {
-        // Full-field view.
+        // Full-field view that scrolls with the javelin.
         scale = initialScale;
-        cameraX = 0;
+        cameraX = javelin.x - (canvas.width / (2 * initialScale));
       } else if (gameState === "landingZoomIn") {
         let elapsed = performance.now() - landingTransitionStartTime;
         let fraction = Math.min(elapsed / landingTransitionDurationIn, 1);
-        // Transition from full-field view (initialScale) to running view (finalScale)
-        scale = initialScale + fraction * (finalScale - initialScale);
-        // Transition cameraX from 0 to landingCameraX.
-        cameraX = 0 + fraction * (landingCameraX - 0);
+        scale = landingZoomStartScale + fraction * (finalScale - landingZoomStartScale);
+        cameraX = landingZoomStartCameraX + fraction * (landingCameraX - landingZoomStartCameraX);
       } else if (gameState === "landed") {
         scale = finalScale;
         cameraX = landingCameraX;
@@ -152,7 +153,7 @@
       return { screenX, screenY };
     }
     
-    // === Draw Meter Markings (every 5 m) ===
+    // === Draw Meter Markings (every 5 meters) ===
     function drawMeterMarkings(cameraX, scale) {
       ctx.fillStyle = "black";
       ctx.strokeStyle = "black";
@@ -206,25 +207,42 @@
         }
       }
       
-      // In flight zoom-out, update javelin physics while transitioning.
-      if (gameState === "flightZoomOut" || gameState === "thrown" || gameState === "landingZoomIn") {
+      // In flight zoom out, update javelin physics and check transition.
+      if (gameState === "flightZoomOut") {
+        javelin.vy += gravity * dt;
+        javelin.x += javelin.vx * dt;
+        javelin.y += javelin.vy * dt;
+        let elapsed = performance.now() - flightTransitionStartTime;
+        if (elapsed >= flightTransitionDuration) {
+          gameState = "thrown";
+        }
+        // Check if javelin has hit the ground.
+        if (javelin.y <= 0) {
+          javelin.y = 0;
+          // Prepare for landing zoom in.
+          landingZoomStartScale = initialScale;
+          landingZoomStartCameraX = javelin.x - (canvas.width / (2 * initialScale));
+          landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
+          gameState = "landingZoomIn";
+          landingTransitionStartTime = performance.now();
+        }
+      }
+      
+      // In thrown or landingZoomIn states, update javelin physics.
+      if (gameState === "thrown" || gameState === "landingZoomIn") {
         javelin.vy += gravity * dt;
         javelin.x += javelin.vx * dt;
         javelin.y += javelin.vy * dt;
         if (javelin.y <= 0) {
           javelin.y = 0;
-          // Start landing zoom in on landing spot.
-          gameState = "landingZoomIn";
-          landingTransitionStartTime = performance.now();
-          landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
-        }
-      }
-      
-      // Handle flight zoom out transition.
-      if (gameState === "flightZoomOut") {
-        let elapsed = performance.now() - flightTransitionStartTime;
-        if (elapsed >= flightTransitionDuration) {
-          gameState = "thrown"; // Now show the javelin in full-field view.
+          // If not already transitioning, start landing zoom in.
+          if (gameState !== "landingZoomIn") {
+            landingZoomStartScale = initialScale;
+            landingZoomStartCameraX = javelin.x - (canvas.width / (2 * initialScale));
+            landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
+            gameState = "landingZoomIn";
+            landingTransitionStartTime = performance.now();
+          }
         }
       }
       
@@ -277,8 +295,9 @@
         let initVy = throwSpeed * Math.sin(angle);
         let startX = player.x;
         let startY = player.y + 0.5; // javelin's starting height (m)
-        let numDots = 5;
-        let dotInterval = 0.3; // seconds between dots
+        // Increase number of dots and reduce time interval for a smoother preview.
+        let numDots = 10;
+        let dotInterval = 0.2; // seconds between dots
         ctx.fillStyle = "black";
         for (let i = 1; i <= numDots; i++) {
           let t = i * dotInterval;
@@ -294,8 +313,8 @@
       }
       
       // --- Draw the Player ---
-      // Only draw the player if not frozen by the throw.
-      if (gameState !== "flightZoomOut" && gameState !== "thrown") {
+      // Draw the player only when not frozen (i.e. not during flight zoom or thrown).
+      if (gameState === "running" || gameState === "aiming") {
         let playerScreen = worldToScreen(player.x, player.y);
         ctx.fillStyle = "#0000FF";
         ctx.beginPath();
@@ -346,7 +365,7 @@
     document.addEventListener('keydown', function(e) {
       if (e.code === "Space") {
         if (gameState === "ready") {
-          // Begin smooth zoom transition into running view.
+          // Start smooth zoom transition into running view.
           gameState = "startTransition";
           transitionStartTime = performance.now();
           resultText = "";
@@ -374,9 +393,9 @@
           javelin.y = player.y + 0.5;
           javelin.vx = playerSpeed + throwSpeed * Math.cos(angle);
           javelin.vy = throwSpeed * Math.sin(angle);
-          // Freeze player's position for the throw.
+          // Freeze player's position at throw time.
           frozenPlayerX = player.x;
-          // Immediately begin flight zoom out to show the javelin in full-field view.
+          // Immediately begin flight zoom out.
           gameState = "flightZoomOut";
           flightTransitionStartTime = performance.now();
         }
