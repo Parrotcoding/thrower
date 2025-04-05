@@ -108,7 +108,6 @@
         let elapsed = performance.now() - transitionStartTime;
         let fraction = Math.min(elapsed / startTransitionDuration, 1);
         scale = initialScale + fraction * (finalScale - initialScale);
-        // Transition camera: from full-field (cameraX = 0) to running view (center on player)
         let runningCameraX = player.x - (canvas.width / (2 * finalScale));
         cameraX = fraction * runningCameraX;
       } else if (gameState === "running") {
@@ -120,14 +119,12 @@
       } else if (gameState === "flightZoomOut") {
         let elapsed = performance.now() - flightTransitionStartTime;
         let fraction = Math.min(elapsed / flightTransitionDuration, 1);
-        // Transition from running view to full-field view.
         scale = finalScale + fraction * (initialScale - finalScale);
         let runningCameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
-        // In full-field view, we want the camera to scroll with the javelin.
+        // In full-field view, let the camera scroll with the javelin.
         let fullFieldCameraX = javelin.x - (canvas.width / (2 * initialScale));
         cameraX = runningCameraX + fraction * (fullFieldCameraX - runningCameraX);
       } else if (gameState === "thrown") {
-        // Full-field view that scrolls with the javelin.
         scale = initialScale;
         cameraX = javelin.x - (canvas.width / (2 * initialScale));
       } else if (gameState === "landingZoomIn") {
@@ -216,10 +213,11 @@
         if (elapsed >= flightTransitionDuration) {
           gameState = "thrown";
         }
-        // Check if javelin has hit the ground.
         if (javelin.y <= 0) {
           javelin.y = 0;
-          // Prepare for landing zoom in.
+          // Freeze javelin so it stays visible.
+          javelin.vx = 0;
+          javelin.vy = 0;
           landingZoomStartScale = initialScale;
           landingZoomStartCameraX = javelin.x - (canvas.width / (2 * initialScale));
           landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
@@ -230,12 +228,14 @@
       
       // In thrown or landingZoomIn states, update javelin physics.
       if (gameState === "thrown" || gameState === "landingZoomIn") {
+        // Continue updating until javelin lands.
         javelin.vy += gravity * dt;
         javelin.x += javelin.vx * dt;
         javelin.y += javelin.vy * dt;
         if (javelin.y <= 0) {
           javelin.y = 0;
-          // If not already transitioning, start landing zoom in.
+          javelin.vx = 0;
+          javelin.vy = 0;
           if (gameState !== "landingZoomIn") {
             landingZoomStartScale = initialScale;
             landingZoomStartCameraX = javelin.x - (canvas.width / (2 * initialScale));
@@ -295,7 +295,6 @@
         let initVy = throwSpeed * Math.sin(angle);
         let startX = player.x;
         let startY = player.y + 0.5; // javelin's starting height (m)
-        // Increase number of dots and reduce time interval for a smoother preview.
         let numDots = 10;
         let dotInterval = 0.2; // seconds between dots
         ctx.fillStyle = "black";
@@ -313,7 +312,6 @@
       }
       
       // --- Draw the Player ---
-      // Draw the player only when not frozen (i.e. not during flight zoom or thrown).
       if (gameState === "running" || gameState === "aiming") {
         let playerScreen = worldToScreen(player.x, player.y);
         ctx.fillStyle = "#0000FF";
@@ -323,13 +321,14 @@
       }
       
       // --- Draw the Javelin ---
+      // In aiming mode, use the negative aiming angle for proper rotation.
       if (gameState === "aiming") {
         let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
         let angle = minAngle + (maxAngle - minAngle) * angleFactor;
         let pos = worldToScreen(player.x, player.y + 0.5);
         ctx.save();
         ctx.translate(pos.screenX, pos.screenY);
-        ctx.rotate(angle);
+        ctx.rotate(-angle);
         ctx.strokeStyle = "black";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -340,7 +339,8 @@
       } else if (gameState === "flightZoomOut" || gameState === "thrown" ||
                  gameState === "landingZoomIn" || gameState === "landed") {
         let pos = worldToScreen(javelin.x, javelin.y);
-        let angle = Math.atan2(javelin.vy, javelin.vx);
+        // Use the inverted y-component to get the correct screen angle.
+        let angle = Math.atan2(-javelin.vy, javelin.vx);
         ctx.save();
         ctx.translate(pos.screenX, pos.screenY);
         ctx.rotate(angle);
@@ -365,12 +365,10 @@
     document.addEventListener('keydown', function(e) {
       if (e.code === "Space") {
         if (gameState === "ready") {
-          // Start smooth zoom transition into running view.
           gameState = "startTransition";
           transitionStartTime = performance.now();
           resultText = "";
         } else if (gameState === "running") {
-          // Enter aiming mode.
           gameState = "aiming";
           spacePressed = true;
           holdStartTime = performance.now();
@@ -388,14 +386,11 @@
           spacePressed = false;
           let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
           let angle = minAngle + (maxAngle - minAngle) * angleFactor;
-          // Set javelin initial conditions.
           javelin.x = player.x;
           javelin.y = player.y + 0.5;
           javelin.vx = playerSpeed + throwSpeed * Math.cos(angle);
           javelin.vy = throwSpeed * Math.sin(angle);
-          // Freeze player's position at throw time.
           frozenPlayerX = player.x;
-          // Immediately begin flight zoom out.
           gameState = "flightZoomOut";
           flightTransitionStartTime = performance.now();
         }
