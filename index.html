@@ -1,398 +1,491 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=800, initial-scale=1.0" />
-  <title>Arcade Cabinet - Infinite Balloon Challenge</title>
+  <meta charset="UTF-8">
+  <title>Javelin Throwing Arcade – Realistic & Cabinet Style</title>
   <style>
-    /* Global Variables & Common Styling */
-    :root {
-      --primary-color: #3f51b5;
-      --accent-color: #ff9800;
-      --bg-color: #ffffff;
-      --secondary-color: #f5f5f5;
-      --text-color: #333;
-    }
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
     body {
-      font-family: 'Roboto', sans-serif;
-      background: var(--secondary-color);
-      color: var(--text-color);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 1rem;
-    }
-    h1, h2 {
-      text-align: center;
-      margin: 1rem;
-    }
-    .score-board {
-      text-align: center;
-      font-size: 1.2rem;
-      margin: 1rem;
-    }
-    /* Arcade Cabinet Container */
-    .arcade-cabinet {
-      width: 800px;
-      margin: 0 auto;
-      background: #000;
-      box-shadow: 0 0 20px rgba(0,0,0,0.7);
-    }
-    /* Arcade Screen (Top Rectangle) */
-    .arcade-screen {
-      width: 100%;
-      height: 600px;
-      background: #333;
-      position: relative;
-      border-bottom: 5px solid #222;
-    }
-    /* Game Area inside the Arcade Screen */
-    #balloon-container {
-      position: relative;
-      width: 800px;
-      height: 600px;
-      border: 1px solid #ccc;
-      overflow: hidden;
-      background: #e8f0fe;
       margin: 0;
-    }
-    #balloon-board {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
-    /* The Pie Dish (inside the arcade screen) */
-    #pie-container {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 150px;
-      height: 80px;
-      border: 5px solid var(--primary-color);
-      border-radius: 40px;
-      background: #fafafa;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 2rem;
-      color: var(--primary-color);
-      transition: width 0.3s;
-      padding: 0 20px;
-      user-select: none;
-      z-index: 5;
-    }
-    /* Arcade Base (Bottom Trapezoid for Button) */
-    .arcade-base {
-      width: 800px;
-      height: 100px;
-      background: #444;
-      clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .arcade-base button {
-      background: var(--primary-color);
+      background: #333;
+      font-family: 'Press Start 2P', cursive, sans-serif;
       color: #fff;
-      border: none;
-      padding: 0.75rem 1.5rem;
-      font-size: 1rem;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.3s;
+      text-align: center;
     }
-    .arcade-base button:hover {
-      background: var(--accent-color);
+    /* Arcade cabinet container */
+    #cabinet {
+      width: 840px;
+      margin: 40px auto;
+      background: #000;
+      border: 10px solid #222;
+      border-radius: 15px;
+      box-shadow: 0 0 20px #000;
+      overflow: hidden;
     }
-    /* Balloon Styling */
-    .balloon {
-      border-radius: 50%;
-      width: 70px;
-      height: 70px;
+    /* Top section: the game screen */
+    #screen {
+      background: #87CEEB;
+      position: relative;
+    }
+    #gameCanvas {
+      display: block;
+      width: 800px;
+      height: 400px;
+      margin: 20px auto;
+      border: 5px inset #000;
+      box-shadow: inset 0 0 10px #000;
+      background: #87CEEB;
+    }
+    /* Bottom section: the control panel (trapezoid) */
+    #controls {
+      position: relative;
+      background: #222;
+      height: 120px;
+      /* Create a trapezoid shape using clip-path */
+      clip-path: polygon(10% 0%, 90% 0%, 100% 100%, 0% 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.5rem;
+    }
+    /* Arcade button styling */
+    #arcadeButton {
+      width: 100px;
+      height: 100px;
+      background: radial-gradient(circle, red 30%, darkred 100%);
+      border: 5px solid #000;
+      border-radius: 50%;
+      box-shadow: 0 5px 10px #000;
+      font-size: 20px;
+      color: #fff;
+      outline: none;
       cursor: pointer;
-      position: absolute;
+    }
+    /* Result text styling */
+    #result {
+      margin-top: 10px;
+      font-size: 18px;
+    }
+    /* Disable text selection */
+    * {
       user-select: none;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-      transition: transform 0.2s;
-    }
-    .balloon:hover {
-      transform: scale(1.1);
-    }
-    /* Colorful Balloon Classes */
-    .balloon.red { background-color: #e57373; }
-    .balloon.blue { background-color: #64b5f6; }
-    .balloon.green { background-color: #81c784; }
-    .balloon.yellow { background-color: #fff176; }
-    .balloon.purple { background-color: #ba68c8; }
-    .balloon.orange { background-color: #ffb74d; }
-    /* Falling Digit Animation */
-    .falling-digit {
-      position: fixed;
-      font-size: 1.5rem;
-      color: var(--primary-color);
-      transition: top 1s ease-in, left 1s ease-in;
-      pointer-events: none;
-      z-index: 100;
+      -webkit-user-select: none;
     }
   </style>
 </head>
 <body>
-  <h1>Pi Day Play</h1>
-  <h2>Infinite Balloon Challenge</h2>
-  <div class="score-board">
-    <span id="balloon-score">Score: 0</span>
-  </div>
-  <div class="arcade-cabinet">
-    <div class="arcade-screen">
-      <div id="balloon-container">
-        <div id="balloon-board">
-          <!-- Balloons will be created by JavaScript -->
-        </div>
-      </div>
-      <div id="pie-container">Pie:</div>
+  <div id="cabinet">
+    <div id="screen">
+      <canvas id="gameCanvas" width="800" height="400"></canvas>
     </div>
-    <div class="arcade-base">
-      <button id="balloon-restart-btn" style="display:none;">Restart Game</button>
+    <div id="controls">
+      <button id="arcadeButton">THROW</button>
     </div>
+    <div id="result"></div>
   </div>
+  
   <script>
-    /* ---------- Global Constants & Variables ---------- */
-    const piDigits = "314159265358979323846264338327950288419716939937510582097494459230781640628620899862803482534211706798214808651328230664709384460955058223172535940812848111745028410270193852110555964462294895493038196442881097566593344612847564823378678316527120190914564856692346034861045432664821339360726024914127372458700";
+    // === Canvas & Context ===
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
     
-    let balloonCurrentIndex = 0;
-    let balloonScore = 0;
-    let pieDigitsCollected = "";
-    let gameRunning = true;
+    // === Field & Scaling Constants ===
+    const fieldWidth = 120;            // Field width in meters
+    const bottomMargin = 40;           // Ground margin
+    const initialScale = canvas.width / fieldWidth; // Full-field view scale (zoomed out)
+    const finalScale = 50;             // Running view: 1 m = 50 pixels (zoomed in)
+    const aimScale = (initialScale + finalScale) / 2; // Intermediate scale for aiming
     
-    const balloonScoreEl = document.getElementById("balloon-score");
-    const balloonBoard = document.getElementById("balloon-board");
-    const balloonRestartBtn = document.getElementById("balloon-restart-btn");
-    const pieContainerEl = document.getElementById("pie-container");
-    const containerEl = document.getElementById("balloon-container");
+    // === Transition Durations (ms) ===
+    const startTransitionDuration = 1000;       
+    const flightTransitionDuration = 1000;        
+    const landingTransitionDurationIn = 1000;     
     
-    let balloons = [];
-    const containerWidth = containerEl.clientWidth;
-    const containerHeight = containerEl.clientHeight;
-    const balloonRadius = 35;
-    let lastTime = null;
+    // === Game States ===
+    // "ready": waiting (full field view)
+    // "startTransition": zooming in to running view
+    // "running": player moving (zoomed in)
+    // "aiming": holding button/space to aim
+    // "flightZoomOut": after throw, zooming out (full field scrolling with javelin)
+    // "thrown": javelin in flight (full field view)
+    // "landingZoomIn": after landing, zooming in on landing spot
+    // "landed": final view (landing spot, result displayed)
+    // "foul": foul (player crosses line without throwing)
+    let gameState = "ready";
+    let resultText = "Press the button or Space to start running.";
     
-    function getRandomColorClass() {
-      const colors = ["red", "blue", "green", "yellow", "purple", "orange"];
-      return colors[Math.floor(Math.random() * colors.length)];
+    let transitionStartTime = null;
+    let flightTransitionStartTime = null;
+    let landingTransitionStartTime = null;
+    
+    // For landing zoom interpolation:
+    let landingZoomStartCameraX = null;
+    let landingZoomStartScale = null;
+    let landingCameraX = null;
+    
+    // === World Physics (SI units) ===
+    const gravity = -9.81;           // m/s² downward
+    const playerSpeed = 7;           // m/s
+    const throwSpeed = 30;           // m/s
+    const minAngle = 20 * Math.PI/180; // radians
+    const maxAngle = 60 * Math.PI/180; // radians
+    const maxHoldTime = 2000;        // ms max aiming
+    
+    // Realistic drag parameters:
+    const airDensity = 1.225;        // kg/m³ (sea level)
+    const dragCoefficient = 0.5;     // typical value
+    const javelinArea = 0.007;       // m² (approximate cross-sectional area)
+    const javelinMass = 0.8;         // kg (javelin mass)
+    
+    // === World Objects ===
+    let player = { x: 0, y: 0 };      // Starting at 0 m (ground y = 0)
+    const playerRadius = 0.3;        // drawn as circle (meters)
+    const foulLineX = 30;            // foul (throwing) line (meters)
+    
+    let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
+    const javelinLength = 1.2;       // meters
+    
+    let frozenPlayerX = 0;           // Freeze player's x at throw time
+    
+    // === Input Control Variables ===
+    let spacePressed = false;
+    let holdStartTime = 0;
+    let holdDuration = 0;
+    
+    // === Arcade Button Functions & Keyboard Support ===
+    function pressSpace() {
+      if (gameState === "ready") {
+        gameState = "startTransition";
+        transitionStartTime = performance.now();
+        resultText = "";
+      } else if (gameState === "running") {
+        gameState = "aiming";
+        spacePressed = true;
+        holdStartTime = performance.now();
+        holdDuration = 0;
+      }
     }
-    
-    function createBalloon(digit) {
-      const elem = document.createElement("div");
-      elem.classList.add("balloon");
-      elem.classList.add(getRandomColorClass());
-      elem.textContent = digit;
-      const width = 70, height = 70;
-      const x = Math.random() * (containerWidth - width);
-      const y = Math.random() * (containerHeight - height);
-      const vx = Math.random() * 200 - 100;
-      const vy = Math.random() * 200 - 100;
-      elem.style.left = x + "px";
-      elem.style.top = y + "px";
-      const balloonObj = { digit, elem, x, y, vx, vy, width, height, radius: balloonRadius };
-      elem.addEventListener("click", () => handleBalloonClick(digit, balloonObj));
-      balloonBoard.appendChild(elem);
-      return balloonObj;
-    }
-    
-    function spawnAllBalloons() {
-      balloons.forEach(b => b.elem.remove());
-      balloons = [];
-      for (let d = 0; d <= 9; d++) {
-        const b = createBalloon(d.toString());
-        balloons.push(b);
+    function releaseSpace() {
+      if (gameState === "aiming" && spacePressed) {
+        spacePressed = false;
+        let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+        let angle = minAngle + (maxAngle - minAngle) * angleFactor;
+        // Set initial javelin conditions.
+        javelin.x = player.x;
+        javelin.y = player.y + 0.5;
+        javelin.vx = playerSpeed + throwSpeed * Math.cos(angle);
+        javelin.vy = throwSpeed * Math.sin(angle);
+        frozenPlayerX = player.x;
+        gameState = "flightZoomOut";
+        flightTransitionStartTime = performance.now();
       }
     }
     
-    function removeBalloon(balloonObj) {
-      const index = balloons.indexOf(balloonObj);
-      if (index > -1) balloons.splice(index, 1);
-      balloonObj.elem.remove();
-    }
+    const arcadeButton = document.getElementById('arcadeButton');
+    arcadeButton.addEventListener('mousedown', pressSpace);
+    arcadeButton.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      pressSpace();
+    });
+    arcadeButton.addEventListener('mouseup', releaseSpace);
+    arcadeButton.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      releaseSpace();
+    });
     
-    function respawnBalloon(digit) {
-      const b = createBalloon(digit);
-      balloons.push(b);
-    }
+    document.addEventListener('keydown', function(e) {
+      if (e.code === "Space") { pressSpace(); }
+      if (e.code === "KeyR") { resetGame(); }
+    });
+    document.addEventListener('keyup', function(e) {
+      if (e.code === "Space") { releaseSpace(); }
+    });
     
-    function updatePhysics(dt) {
-      balloons.forEach(b => {
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
-        if (b.x < 0) { b.x = 0; b.vx *= -1; }
-        if (b.x + b.width > containerWidth) { b.x = containerWidth - b.width; b.vx *= -1; }
-        if (b.y < 0) { b.y = 0; b.vy *= -1; }
-        if (b.y + b.height > containerHeight) { b.y = containerHeight - b.height; b.vy *= -1; }
-      });
-      for (let i = 0; i < balloons.length; i++) {
-        for (let j = i + 1; j < balloons.length; j++) {
-          let b1 = balloons[i], b2 = balloons[j];
-          let cx1 = b1.x + b1.width / 2, cy1 = b1.y + b1.height / 2;
-          let cx2 = b2.x + b2.width / 2, cy2 = b2.y + b2.height / 2;
-          let dx = cx2 - cx1, dy = cy2 - cy1;
-          let dist = Math.sqrt(dx * dx + dy * dy);
-          let minDist = b1.radius + b2.radius;
-          if (dist < minDist && dist > 0) {
-            let nx = dx / dist, ny = dy / dist;
-            let dvx = b1.vx - b2.vx, dvy = b1.vy - b2.vy;
-            let dot = dvx * nx + dvy * ny;
-            if (dot < 0) {
-              b1.vx -= dot * nx;
-              b1.vy -= dot * ny;
-              b2.vx += dot * nx;
-              b2.vy += dot * ny;
-            }
-            let overlap = minDist - dist;
-            b1.x -= (overlap * nx) / 2;
-            b1.y -= (overlap * ny) / 2;
-            b2.x += (overlap * nx) / 2;
-            b2.y += (overlap * ny) / 2;
-          }
-        }
+    // === Camera & View Functions ===
+    function getCameraAndScale() {
+      let scale, cameraX;
+      if (gameState === "ready") {
+        scale = initialScale;
+        cameraX = 0;
+      } else if (gameState === "startTransition") {
+        let elapsed = performance.now() - transitionStartTime;
+        let fraction = Math.min(elapsed / startTransitionDuration, 1);
+        scale = initialScale + fraction * (finalScale - initialScale);
+        let runningCameraX = player.x - (canvas.width / (2 * finalScale));
+        cameraX = fraction * runningCameraX;
+      } else if (gameState === "running") {
+        scale = finalScale;
+        cameraX = player.x - (canvas.width / (2 * finalScale));
+      } else if (gameState === "aiming") {
+        scale = aimScale;
+        cameraX = player.x - (canvas.width / (2 * aimScale));
+      } else if (gameState === "flightZoomOut") {
+        let elapsed = performance.now() - flightTransitionStartTime;
+        let fraction = Math.min(elapsed / flightTransitionDuration, 1);
+        scale = finalScale + fraction * (initialScale - finalScale);
+        let runningCameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
+        let fullFieldCameraX = javelin.x - (canvas.width / (2 * initialScale));
+        cameraX = runningCameraX + fraction * (fullFieldCameraX - runningCameraX);
+      } else if (gameState === "thrown") {
+        scale = initialScale;
+        cameraX = javelin.x - (canvas.width / (2 * initialScale));
+      } else if (gameState === "landingZoomIn") {
+        let elapsed = performance.now() - landingTransitionStartTime;
+        let fraction = Math.min(elapsed / landingTransitionDurationIn, 1);
+        scale = landingZoomStartScale + fraction * (finalScale - landingZoomStartScale);
+        cameraX = landingZoomStartCameraX + fraction * (landingCameraX - landingZoomStartCameraX);
+      } else if (gameState === "landed") {
+        scale = finalScale;
+        cameraX = landingCameraX;
+      } else if (gameState === "foul") {
+        scale = finalScale;
+        cameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
       }
-      let containerRect = containerEl.getBoundingClientRect();
-      let pieRect = pieContainerEl.getBoundingClientRect();
-      let pieX = pieRect.left - containerRect.left;
-      let pieY = pieRect.top - containerRect.top;
-      let pieW = pieRect.width;
-      let pieH = pieRect.height;
-      balloons.forEach(b => {
-        if (b.x < pieX + pieW && b.x + b.width > pieX &&
-            b.y < pieY + pieH && b.y + b.height > pieY) {
-          let overlapX = Math.min(b.x + b.width, pieX + pieW) - Math.max(b.x, pieX);
-          let overlapY = Math.min(b.y + b.height, pieY + pieH) - Math.max(b.y, pieY);
-          if (overlapX < overlapY) {
-            if (b.x + b.width / 2 < pieX + pieW / 2) {
-              b.x = pieX - b.width;
-            } else {
-              b.x = pieX + pieW;
-            }
-            b.vx = -b.vx;
-          } else {
-            if (b.y + b.height / 2 < pieY + pieH / 2) {
-              b.y = pieY - b.height;
-            } else {
-              b.y = pieY + pieH;
-            }
-            b.vy = -b.vy;
-          }
-        }
-      });
-      balloons.forEach(b => {
-        b.elem.style.left = b.x + "px";
-        b.elem.style.top = b.y + "px";
-      });
+      return { scale, cameraX };
     }
     
-    function simulationLoop(timestamp) {
-      if (!lastTime) lastTime = timestamp;
-      let dt = (timestamp - lastTime) / 1000;
-      lastTime = timestamp;
-      if (gameRunning) {
-        updatePhysics(dt);
-        requestAnimationFrame(simulationLoop);
+    function worldToScreen(x, y) {
+      const { scale, cameraX } = getCameraAndScale();
+      return {
+        screenX: (x - cameraX) * scale,
+        screenY: canvas.height - bottomMargin - y * scale
+      };
+    }
+    
+    // === Draw Meter Markings (every 5 m) ===
+    function drawMeterMarkings(cameraX, scale) {
+      ctx.fillStyle = "black";
+      ctx.strokeStyle = "black";
+      ctx.font = "12px Arial";
+      let startMark = Math.ceil(cameraX / 5) * 5;
+      let endMark = Math.floor((cameraX + canvas.width / scale) / 5) * 5;
+      for (let m = startMark; m <= endMark; m += 5) {
+        let xPos = (m - cameraX) * scale;
+        ctx.beginPath();
+        ctx.moveTo(xPos, canvas.height - bottomMargin);
+        ctx.lineTo(xPos, canvas.height - bottomMargin + 10);
+        ctx.stroke();
+        ctx.fillText(m + " m", xPos - 15, canvas.height - bottomMargin + 22);
       }
     }
     
-    function handleBalloonClick(clickedDigit, balloonObj) {
-      const expectedDigit = piDigits[balloonCurrentIndex];
-      if (clickedDigit === expectedDigit) {
-        balloonScore++;
-        balloonCurrentIndex++;
-        balloonScoreEl.textContent = "Score: " + balloonScore;
-        if (balloonCurrentIndex === 1) {
-          pieDigitsCollected = piDigits[0] + ".";
-        } else {
-          pieDigitsCollected += clickedDigit;
-        }
-        updatePieContainer();
-        if (balloonCurrentIndex >= piDigits.length) {
-          gameRunning = false;
-          clearAllBalloons();
-          balloonRestartBtn.style.display = "inline-block";
-          return;
-        }
-        dropDigitToPie(clickedDigit, balloonObj);
-        removeBalloon(balloonObj);
-        respawnBalloon(clickedDigit);
+    // === Draw Distance Indicator (Sideways Red Raindrop) ===
+    // Now shows the field meter (rounded x-coordinate) where the javelin lands (or player's current meter).
+    function drawDistanceIndicator() {
+      let fieldMeter;
+      if (gameState === "thrown" || gameState === "flightZoomOut" ||
+          gameState === "landingZoomIn" || gameState === "landed") {
+        fieldMeter = Math.round(javelin.x);
       } else {
-        gameRunning = false;
-        clearAllBalloons();
-        balloonRestartBtn.style.display = "inline-block";
+        fieldMeter = Math.round(player.x);
+      }
+      
+      const dropWidth = 60, dropHeight = 30;
+      const dropX = canvas.width - dropWidth - 20, dropY = 20;
+      
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      ctx.moveTo(dropX, dropY + dropHeight / 2);
+      ctx.quadraticCurveTo(dropX + dropWidth, dropY, dropX + dropWidth, dropY + dropHeight / 2);
+      ctx.quadraticCurveTo(dropX + dropWidth, dropY + dropHeight, dropX, dropY + dropHeight / 2);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.fillStyle = "white";
+      ctx.font = "bold 16px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(fieldMeter + " m", dropX + dropWidth / 2, dropY + dropHeight / 2);
+    }
+    
+    // === Realistic Javelin Physics Update Function ===
+    function updateJavelinPhysics(dt) {
+      let vx = javelin.vx, vy = javelin.vy;
+      let v = Math.sqrt(vx * vx + vy * vy);
+      if (v > 0) {
+        let dragForce = 0.5 * airDensity * v * v * dragCoefficient * javelinArea;
+        let dragAccel = dragForce / javelinMass;
+        let dragAx = -dragAccel * (vx / v);
+        let dragAy = -dragAccel * (vy / v);
+        javelin.vx += dragAx * dt;
+        javelin.vy += dragAy * dt;
+      }
+      javelin.vy += gravity * dt;
+      javelin.x += javelin.vx * dt;
+      javelin.y += javelin.vy * dt;
+    }
+    
+    // === Main Game Loop ===
+    let lastTime = 0;
+    function gameLoop(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const dt = (timestamp - lastTime) / 1000;
+      lastTime = timestamp;
+      
+      update(dt);
+      draw();
+      
+      document.getElementById("result").innerText = resultText;
+      requestAnimationFrame(gameLoop);
+    }
+    requestAnimationFrame(gameLoop);
+    
+    // === Update Game State ===
+    function update(dt) {
+      if (gameState === "startTransition") {
+        let elapsed = performance.now() - transitionStartTime;
+        if (elapsed >= startTransitionDuration) {
+          gameState = "running";
+        }
+      }
+      
+      if (gameState === "running" || gameState === "aiming") {
+        player.x += playerSpeed * dt;
+        if (player.x > foulLineX) {
+          gameState = "foul";
+          resultText = "Foul! You crossed the line without throwing. Press R to restart.";
+        }
+        if (gameState === "aiming" && spacePressed) {
+          holdDuration = performance.now() - holdStartTime;
+        }
+      }
+      
+      if (gameState === "flightZoomOut" || gameState === "thrown" || gameState === "landingZoomIn") {
+        updateJavelinPhysics(dt);
+        if (javelin.y <= 0) {
+          javelin.y = 0;
+          javelin.vx = 0;
+          javelin.vy = 0;
+          if (gameState !== "landingZoomIn") {
+            landingZoomStartScale = initialScale;
+            landingZoomStartCameraX = javelin.x - (canvas.width / (2 * initialScale));
+            landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
+            gameState = "landingZoomIn";
+            landingTransitionStartTime = performance.now();
+          }
+        }
+        if (gameState === "flightZoomOut") {
+          let elapsed = performance.now() - flightTransitionStartTime;
+          if (elapsed >= flightTransitionDuration) {
+            gameState = "thrown";
+          }
+        }
+      }
+      
+      if (gameState === "landingZoomIn") {
+        let elapsed = performance.now() - landingTransitionStartTime;
+        if (elapsed >= landingTransitionDurationIn) {
+          gameState = "landed";
+          let distance = javelin.x;
+          resultText = "Distance: " + distance.toFixed(2) + " m. Press R to restart.";
+        }
       }
     }
     
-    function dropDigitToPie(digit, balloonObj) {
-      const fallingDigit = document.createElement("div");
-      fallingDigit.classList.add("falling-digit");
-      fallingDigit.textContent = digit;
-      const balloonRect = balloonObj.elem.getBoundingClientRect();
-      const pieRect = pieContainerEl.getBoundingClientRect();
-      fallingDigit.style.top = balloonRect.top + "px";
-      fallingDigit.style.left = balloonRect.left + "px";
-      document.body.appendChild(fallingDigit);
-      const targetTop = pieRect.top + pieRect.height / 2;
-      const targetLeft = pieRect.left + pieRect.width / 2;
-      fallingDigit.offsetHeight;
-      fallingDigit.style.top = targetTop + "px";
-      fallingDigit.style.left = targetLeft + "px";
-      fallingDigit.addEventListener("transitionend", () => {
-        fallingDigit.remove();
-      }, { once: true });
-    }
-    
-    function updatePieContainer() {
-      pieContainerEl.textContent = "Pie: " + pieDigitsCollected;
-      const numChars = pieDigitsCollected.length;
-      const minWidth = 150;
-      let newWidth = minWidth;
-      if (numChars > 2) {
-        newWidth = minWidth + (numChars - 2) * 15;
+    // === Draw Everything ===
+    function draw() {
+      const { scale, cameraX } = getCameraAndScale();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      let skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      skyGradient.addColorStop(0, "#87CEEB");
+      skyGradient.addColorStop(1, "#B0E0E6");
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      ctx.fillStyle = "#228B22";
+      ctx.fillRect(0, canvas.height - bottomMargin, canvas.width, bottomMargin);
+      
+      drawMeterMarkings(cameraX, scale);
+      
+      let foulScreen = worldToScreen(foulLineX, 0);
+      ctx.strokeStyle = "red";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(foulScreen.screenX, 0);
+      ctx.lineTo(foulScreen.screenX, canvas.height);
+      ctx.stroke();
+      
+      if (gameState === "aiming" && spacePressed) {
+        let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+        let angle = minAngle + (maxAngle - minAngle) * angleFactor;
+        let initVx = playerSpeed + throwSpeed * Math.cos(angle);
+        let initVy = throwSpeed * Math.sin(angle);
+        let startX = player.x, startY = player.y + 0.5;
+        let numDots = 10, dotInterval = 0.2;
+        ctx.fillStyle = "black";
+        for (let i = 1; i <= numDots; i++) {
+          let t = i * dotInterval;
+          let dotX = startX + initVx * t;
+          let dotY = startY + initVy * t + 0.5 * gravity * t * t;
+          if (dotY < 0) break;
+          let pos = worldToScreen(dotX, dotY);
+          let dotRadius = 0.1 * scale;
+          ctx.beginPath();
+          ctx.arc(pos.screenX, pos.screenY, dotRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
-      pieContainerEl.style.width = newWidth + "px";
+      
+      if (gameState === "running" || gameState === "aiming") {
+        let playerScreen = worldToScreen(player.x, player.y);
+        ctx.fillStyle = "#0000FF";
+        ctx.beginPath();
+        ctx.arc(playerScreen.screenX, playerScreen.screenY, playerRadius * scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      if (gameState === "aiming") {
+        let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+        let angle = minAngle + (maxAngle - minAngle) * angleFactor;
+        let pos = worldToScreen(player.x, player.y + 0.5);
+        ctx.save();
+        ctx.translate(pos.screenX, pos.screenY);
+        ctx.rotate(-angle);
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(javelinLength * scale, 0);
+        ctx.stroke();
+        ctx.restore();
+      } else if (gameState === "flightZoomOut" || gameState === "thrown" ||
+                 gameState === "landingZoomIn" || gameState === "landed") {
+        let pos = worldToScreen(javelin.x, javelin.y);
+        let angle = Math.atan2(-javelin.vy, javelin.vx);
+        ctx.save();
+        ctx.translate(pos.screenX, pos.screenY);
+        ctx.rotate(angle);
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(javelinLength * scale, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+      
+      drawDistanceIndicator();
+      
+      if (gameState === "ready") {
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+      }
     }
     
-    function clearAllBalloons() {
-      balloons.forEach(b => b.elem.remove());
-      balloons = [];
+    function resetGame() {
+      gameState = "ready";
+      resultText = "Press the button or Space to start running.";
+      player.x = 0;
+      player.y = 0;
+      javelin = { x: 0, y: 0, vx: 0, vy: 0 };
+      frozenPlayerX = 0;
+      spacePressed = false;
+      holdDuration = 0;
+      holdStartTime = 0;
+      transitionStartTime = null;
+      flightTransitionStartTime = null;
+      landingTransitionStartTime = null;
     }
-    
-    function startBalloonGame() {
-      gameRunning = true;
-      balloonCurrentIndex = 0;
-      balloonScore = 0;
-      pieDigitsCollected = "";
-      balloonScoreEl.textContent = "Score: " + balloonScore;
-      pieContainerEl.textContent = "Pie:";
-      pieContainerEl.style.width = "150px";
-      clearAllBalloons();
-      spawnAllBalloons();
-      balloonRestartBtn.style.display = "none";
-      lastTime = null;
-      requestAnimationFrame(simulationLoop);
-    }
-    
-    balloonRestartBtn.addEventListener("click", startBalloonGame);
-    
-    window.onload = function() {
-      startBalloonGame();
-    };
   </script>
 </body>
 </html>
