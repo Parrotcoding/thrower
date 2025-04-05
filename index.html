@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Game – Flight Zoom & Landing Zoom (Revised)</title>
+  <title>Javelin Throwing Game – With Distance Indicator</title>
   <style>
     body {
       margin: 0;
@@ -38,8 +38,7 @@
     const bottomMargin = 40;           // Space at bottom for ground & meter markings
     const initialScale = canvas.width / fieldWidth; // Full-field view scale (zoomed out)
     const finalScale = 50;             // Running view: 1 m = 50 pixels (zoomed in)
-    // For aiming, use an intermediate scale so that preview dots are clearly visible.
-    const aimScale = (initialScale + finalScale) / 2;
+    const aimScale = (initialScale + finalScale) / 2; // Intermediate scale for aiming
     
     // === Transition Durations (in ms) ===
     const startTransitionDuration = 1000;       // Zoom in from full field to running view at start
@@ -60,7 +59,6 @@
     let gameState = "ready";
     let resultText = "Press Space to start running (full field view).";
     
-    // Timing variables for transitions
     let transitionStartTime = null;         // For startTransition
     let flightTransitionStartTime = null;     // For flightZoomOut
     let landingTransitionStartTime = null;    // For landingZoomIn
@@ -79,18 +77,14 @@
     const maxHoldTime = 2000;        // ms maximum for aiming
     
     // === World Objects ===
-    // Player starts at 0 m (ground is y = 0)
-    let player = { x: 0, y: 0 };
-    const playerRadius = 0.3;        // meters (for drawing as a circle)
-    // Foul (throwing) line – must throw before crossing this x (meters)
-    const foulLineX = 30;
+    let player = { x: 0, y: 0 };      // Starting at 0 m (ground is y = 0)
+    const playerRadius = 0.3;        // meters (drawn as circle)
+    const foulLineX = 30;            // Foul (throwing) line (meters)
     
-    // Javelin properties
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
     const javelinLength = 1.2;       // meters
     
-    // When throw is made, freeze player’s x (for camera reference)
-    let frozenPlayerX = 0;
+    let frozenPlayerX = 0;           // Freeze player x at throw time
     
     // === Input Control Variables ===
     let spacePressed = false;
@@ -98,7 +92,6 @@
     let holdDuration = 0;
     
     // === Camera & View Function ===
-    // Returns the current scale and cameraX (left edge of view in world coordinates)
     function getCameraAndScale() {
       let scale, cameraX;
       if (gameState === "ready") {
@@ -121,7 +114,6 @@
         let fraction = Math.min(elapsed / flightTransitionDuration, 1);
         scale = finalScale + fraction * (initialScale - finalScale);
         let runningCameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
-        // In full-field view, let the camera scroll with the javelin.
         let fullFieldCameraX = javelin.x - (canvas.width / (2 * initialScale));
         cameraX = runningCameraX + fraction * (fullFieldCameraX - runningCameraX);
       } else if (gameState === "thrown") {
@@ -142,7 +134,6 @@
       return { scale, cameraX };
     }
     
-    // Convert world coordinates (meters) to screen coordinates (pixels)
     function worldToScreen(x, y) {
       const { scale, cameraX } = getCameraAndScale();
       let screenX = (x - cameraX) * scale;
@@ -167,6 +158,45 @@
       }
     }
     
+    // === Draw Distance Indicator ===
+    // This function draws a sideways red raindrop shape with white text inside it.
+    // The text shows how many whole number meters away from the foul line you are.
+    function drawDistanceIndicator() {
+      // Determine the distance based on game state.
+      let distance;
+      if (gameState === "thrown" || gameState === "flightZoomOut" ||
+          gameState === "landingZoomIn" || gameState === "landed") {
+        distance = Math.round(javelin.x - foulLineX);
+      } else {
+        distance = Math.round(foulLineX - player.x);
+      }
+      
+      // Set up position and dimensions for the raindrop.
+      const dropWidth = 60;
+      const dropHeight = 30;
+      const dropX = canvas.width - dropWidth - 20; // 20px margin from right
+      const dropY = 20;                            // 20px from top
+      
+      // Draw the sideways raindrop shape.
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      // Start at the left-middle point (the tip)
+      ctx.moveTo(dropX, dropY + dropHeight / 2);
+      // Top curve: quadratic curve to the right-top corner.
+      ctx.quadraticCurveTo(dropX + dropWidth, dropY, dropX + dropWidth, dropY + dropHeight / 2);
+      // Bottom curve: quadratic curve from right-bottom corner back to tip.
+      ctx.quadraticCurveTo(dropX + dropWidth, dropY + dropHeight, dropX, dropY + dropHeight / 2);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Draw the white text inside the shape.
+      ctx.fillStyle = "white";
+      ctx.font = "bold 16px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(distance + " m", dropX + dropWidth / 2, dropY + dropHeight / 2);
+    }
+    
     // === Main Game Loop ===
     let lastTime = 0;
     function gameLoop(timestamp) {
@@ -184,7 +214,6 @@
     
     // === Update Game State ===
     function update(dt) {
-      // Transition from full-field to running view at start.
       if (gameState === "startTransition") {
         let elapsed = performance.now() - transitionStartTime;
         if (elapsed >= startTransitionDuration) {
@@ -192,7 +221,6 @@
         }
       }
       
-      // In running or aiming mode, update player position.
       if (gameState === "running" || gameState === "aiming") {
         player.x += playerSpeed * dt;
         if (player.x > foulLineX) {
@@ -204,7 +232,6 @@
         }
       }
       
-      // In flight zoom out, update javelin physics and check transition.
       if (gameState === "flightZoomOut") {
         javelin.vy += gravity * dt;
         javelin.x += javelin.vx * dt;
@@ -215,7 +242,6 @@
         }
         if (javelin.y <= 0) {
           javelin.y = 0;
-          // Freeze javelin so it stays visible.
           javelin.vx = 0;
           javelin.vy = 0;
           landingZoomStartScale = initialScale;
@@ -226,9 +252,7 @@
         }
       }
       
-      // In thrown or landingZoomIn states, update javelin physics.
       if (gameState === "thrown" || gameState === "landingZoomIn") {
-        // Continue updating until javelin lands.
         javelin.vy += gravity * dt;
         javelin.x += javelin.vx * dt;
         javelin.y += javelin.vy * dt;
@@ -246,7 +270,6 @@
         }
       }
       
-      // Handle landing zoom in transition.
       if (gameState === "landingZoomIn") {
         let elapsed = performance.now() - landingTransitionStartTime;
         if (elapsed >= landingTransitionDurationIn) {
@@ -260,25 +283,19 @@
     // === Draw Everything ===
     function draw() {
       const { scale, cameraX } = getCameraAndScale();
-      
-      // Clear canvas.
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Draw sky gradient.
       let skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
       skyGradient.addColorStop(0, "#87CEEB");
       skyGradient.addColorStop(1, "#B0E0E6");
       ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Draw ground.
       ctx.fillStyle = "#228B22";
       ctx.fillRect(0, canvas.height - bottomMargin, canvas.width, bottomMargin);
       
-      // Draw meter markings.
       drawMeterMarkings(cameraX, scale);
       
-      // Draw foul (throwing) line.
       let foulScreen = worldToScreen(foulLineX, 0);
       ctx.strokeStyle = "red";
       ctx.lineWidth = 3;
@@ -287,7 +304,6 @@
       ctx.lineTo(foulScreen.screenX, canvas.height);
       ctx.stroke();
       
-      // --- Preview Dots in Aiming Mode ---
       if (gameState === "aiming" && spacePressed) {
         let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
         let angle = minAngle + (maxAngle - minAngle) * angleFactor;
@@ -296,7 +312,7 @@
         let startX = player.x;
         let startY = player.y + 0.5; // javelin's starting height (m)
         let numDots = 10;
-        let dotInterval = 0.2; // seconds between dots
+        let dotInterval = 0.2;
         ctx.fillStyle = "black";
         for (let i = 1; i <= numDots; i++) {
           let t = i * dotInterval;
@@ -311,7 +327,6 @@
         }
       }
       
-      // --- Draw the Player ---
       if (gameState === "running" || gameState === "aiming") {
         let playerScreen = worldToScreen(player.x, player.y);
         ctx.fillStyle = "#0000FF";
@@ -320,15 +335,13 @@
         ctx.fill();
       }
       
-      // --- Draw the Javelin ---
-      // In aiming mode, use the negative aiming angle for proper rotation.
       if (gameState === "aiming") {
         let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
         let angle = minAngle + (maxAngle - minAngle) * angleFactor;
         let pos = worldToScreen(player.x, player.y + 0.5);
         ctx.save();
         ctx.translate(pos.screenX, pos.screenY);
-        ctx.rotate(-angle);
+        ctx.rotate(-angle); // negative for proper orientation in aiming mode
         ctx.strokeStyle = "black";
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -339,7 +352,7 @@
       } else if (gameState === "flightZoomOut" || gameState === "thrown" ||
                  gameState === "landingZoomIn" || gameState === "landed") {
         let pos = worldToScreen(javelin.x, javelin.y);
-        // Use the inverted y-component to get the correct screen angle.
+        // Use inverted y-component to determine the correct screen angle.
         let angle = Math.atan2(-javelin.vy, javelin.vx);
         ctx.save();
         ctx.translate(pos.screenX, pos.screenY);
@@ -353,7 +366,9 @@
         ctx.restore();
       }
       
-      // In the ready state, optionally draw a border.
+      // Draw the distance indicator overlay.
+      drawDistanceIndicator();
+      
       if (gameState === "ready") {
         ctx.strokeStyle = "black";
         ctx.lineWidth = 2;
@@ -397,7 +412,6 @@
       }
     });
     
-    // === Reset Game ===
     function resetGame() {
       gameState = "ready";
       resultText = "Press Space to start running (full field view).";
