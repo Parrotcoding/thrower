@@ -2,31 +2,71 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Game – Realistic Physics</title>
+  <title>Javelin Throwing Arcade</title>
   <style>
     body {
       margin: 0;
-      background: #87CEEB;
-      font-family: Arial, sans-serif;
+      background: #333;
+      font-family: 'Press Start 2P', cursive, sans-serif;
+      color: #fff;
       text-align: center;
     }
-    canvas {
-      display: block;
-      margin: 20px auto;
-      border: 2px solid #333;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-      background: #87CEEB;
+    /* Arcade cabinet container */
+    #cabinet {
+      width: 840px;
+      margin: 40px auto;
+      background: linear-gradient(135deg, #555 0%, #222 100%);
+      padding: 20px;
+      border: 10px solid #000;
+      border-radius: 15px;
+      box-shadow: 0 0 20px #000;
     }
-    #result {
+    /* Canvas styled like an arcade screen */
+    #gameCanvas {
+      background: #87CEEB;
+      display: block;
+      margin: 0 auto;
+      border: 5px inset #000;
+      box-shadow: inset 0 0 10px #000;
+    }
+    /* Control panel area */
+    #controls {
+      margin-top: 20px;
+    }
+    /* Arcade button styling */
+    #arcadeButton {
+      width: 120px;
+      height: 120px;
+      background: radial-gradient(circle, red 30%, darkred 100%);
+      border: 5px solid #000;
+      border-radius: 50%;
+      box-shadow: 0 5px 10px #000;
       font-size: 20px;
+      color: #fff;
+      outline: none;
+      cursor: pointer;
+    }
+    /* Disable text selection */
+    * {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    /* Result text styling */
+    #result {
       margin-top: 10px;
-      color: #333;
+      font-size: 18px;
     }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas" width="800" height="400"></canvas>
-  <div id="result"></div>
+  <div id="cabinet">
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div id="result"></div>
+    <div id="controls">
+      <!-- The arcade button mimics the spacebar -->
+      <button id="arcadeButton">THROW</button>
+    </div>
+  </div>
   
   <script>
     // === Canvas & Context ===
@@ -36,7 +76,7 @@
     // === Field & Scaling Constants ===
     const fieldWidth = 120;            // Field width in meters (realistic field)
     const bottomMargin = 40;           // Space at bottom for ground & meter markings
-    const initialScale = canvas.width / fieldWidth; // Full-field view scale (zoomed out)
+    const initialScale = canvas.width / fieldWidth; // Full-field view (zoomed out)
     const finalScale = 50;             // Running view: 1 m = 50 pixels (zoomed in)
     const aimScale = (initialScale + finalScale) / 2; // Intermediate scale for aiming
     
@@ -49,15 +89,15 @@
     // Game states:
     // "ready": full field view waiting to start.
     // "startTransition": zooming in to running view.
-    // "running": player is moving (camera centered on player, zoomed in).
-    // "aiming": player holding Space to aim (using aimScale).
-    // "flightZoomOut": immediately after throw, zooming out to full-field view.
-    // "thrown": javelin in flight in full-field view (camera scrolls with the javelin).
-    // "landingZoomIn": after landing, zooming in on the landing spot.
+    // "running": player moving (camera centered on player, zoomed in).
+    // "aiming": holding Space (or arcade button) to aim.
+    // "flightZoomOut": after throw, zooming out to full-field view.
+    // "thrown": javelin in flight (full-field view scrolling with it).
+    // "landingZoomIn": after landing, zooming in on landing spot.
     // "landed": final view (zoomed in on landing spot) with result.
-    // "foul": foul (crossed throwing line without throwing).
+    // "foul": foul (player crosses line without throwing).
     let gameState = "ready";
-    let resultText = "Press Space to start running (full field view).";
+    let resultText = "Press the button or Space to start running.";
     
     let transitionStartTime = null;         // For startTransition
     let flightTransitionStartTime = null;     // For flightZoomOut
@@ -74,30 +114,86 @@
     const throwSpeed = 30;           // m/s
     const minAngle = 20 * Math.PI/180; // radians
     const maxAngle = 60 * Math.PI/180; // radians
-    const maxHoldTime = 2000;        // ms maximum for aiming
+    const maxHoldTime = 2000;        // ms max for aiming
     
-    // Additional parameters for realistic physics (drag)
-    const airDensity = 1.225;        // kg/m³ (at sea level)
-    const dragCoefficient = 0.5;     // Typical for a streamlined object
-    const javelinArea = 0.007;       // Estimated cross-sectional area in m²
-    const javelinMass = 0.8;         // Mass of the javelin in kg
+    // Additional realistic parameters for drag
+    const airDensity = 1.225;        // kg/m³ (sea level)
+    const dragCoefficient = 0.5;     // typical value
+    const javelinArea = 0.007;       // m² (approximate cross-sectional area)
+    const javelinMass = 0.8;         // kg (javelin mass)
     
     // === World Objects ===
-    let player = { x: 0, y: 0 };      // Starting at 0 m (ground is y = 0)
-    const playerRadius = 0.3;        // meters (drawn as circle)
-    const foulLineX = 30;            // Foul (throwing) line in meters
+    let player = { x: 0, y: 0 };      // Player starting at 0 m (ground y = 0)
+    const playerRadius = 0.3;        // drawn as a circle (meters)
+    const foulLineX = 30;            // foul (throwing) line (meters)
     
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
     const javelinLength = 1.2;       // meters
     
-    let frozenPlayerX = 0;           // Freeze player x at throw time
+    let frozenPlayerX = 0;           // Freeze player's x when throw is made
     
     // === Input Control Variables ===
     let spacePressed = false;
     let holdStartTime = 0;
     let holdDuration = 0;
     
-    // === Camera & View Function ===
+    // === Arcade Button Functions ===
+    function pressSpace() {
+      if (gameState === "ready") {
+        gameState = "startTransition";
+        transitionStartTime = performance.now();
+        resultText = "";
+      } else if (gameState === "running") {
+        gameState = "aiming";
+        spacePressed = true;
+        holdStartTime = performance.now();
+        holdDuration = 0;
+      }
+    }
+    function releaseSpace() {
+      if (gameState === "aiming" && spacePressed) {
+        spacePressed = false;
+        let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+        let angle = minAngle + (maxAngle - minAngle) * angleFactor;
+        javelin.x = player.x;
+        javelin.y = player.y + 0.5;
+        javelin.vx = playerSpeed + throwSpeed * Math.cos(angle);
+        javelin.vy = throwSpeed * Math.sin(angle);
+        frozenPlayerX = player.x;
+        gameState = "flightZoomOut";
+        flightTransitionStartTime = performance.now();
+      }
+    }
+    
+    // Add event listeners to the arcade button
+    const arcadeButton = document.getElementById('arcadeButton');
+    arcadeButton.addEventListener('mousedown', pressSpace);
+    arcadeButton.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      pressSpace();
+    });
+    arcadeButton.addEventListener('mouseup', releaseSpace);
+    arcadeButton.addEventListener('touchend', function(e) {
+      e.preventDefault();
+      releaseSpace();
+    });
+    
+    // Also support keyboard (Spacebar) for convenience.
+    document.addEventListener('keydown', function(e) {
+      if (e.code === "Space") {
+        pressSpace();
+      }
+      if (e.code === "KeyR") {
+        resetGame();
+      }
+    });
+    document.addEventListener('keyup', function(e) {
+      if (e.code === "Space") {
+        releaseSpace();
+      }
+    });
+    
+    // === Camera & View Functions ===
     function getCameraAndScale() {
       let scale, cameraX;
       if (gameState === "ready") {
@@ -166,7 +262,6 @@
     
     // === Draw Distance Indicator ===
     function drawDistanceIndicator() {
-      // Compute distance from foul line (player's x before throw; javelin's x after)
       let distance;
       if (gameState === "thrown" || gameState === "flightZoomOut" ||
           gameState === "landingZoomIn" || gameState === "landed") {
@@ -174,11 +269,8 @@
       } else {
         distance = Math.round(foulLineX - player.x);
       }
-      
-      const dropWidth = 60;
-      const dropHeight = 30;
-      const dropX = canvas.width - dropWidth - 20;
-      const dropY = 20;
+      const dropWidth = 60, dropHeight = 30;
+      const dropX = canvas.width - dropWidth - 20, dropY = 20;
       
       ctx.fillStyle = "red";
       ctx.beginPath();
@@ -212,7 +304,7 @@
     
     // === Update Game State ===
     function update(dt) {
-      // Transition: full-field to running view.
+      // Start transition: full-field to running view.
       if (gameState === "startTransition") {
         let elapsed = performance.now() - transitionStartTime;
         if (elapsed >= startTransitionDuration) {
@@ -231,9 +323,9 @@
         }
       }
       
-      // For flight phases, update javelin physics with gravity and aerodynamic drag.
+      // For flight phases: update javelin with gravity and drag.
       if (gameState === "flightZoomOut" || gameState === "thrown" || gameState === "landingZoomIn") {
-        // Compute drag force
+        // Compute drag force based on current velocity.
         let vx = javelin.vx, vy = javelin.vy;
         let v = Math.sqrt(vx * vx + vy * vy);
         let dragAx = 0, dragAy = 0;
@@ -243,25 +335,25 @@
           dragAx = -dragAccel * (vx / v);
           dragAy = -dragAccel * (vy / v);
         }
-        // Apply gravity and drag
         javelin.vx += dragAx * dt;
         javelin.vy += (gravity + dragAy) * dt;
         javelin.x += javelin.vx * dt;
         javelin.y += javelin.vy * dt;
         
-        // Transition check: if javelin touches ground.
+        // Check if javelin has hit the ground.
         if (javelin.y <= 0) {
           javelin.y = 0;
           javelin.vx = 0;
           javelin.vy = 0;
-          landingZoomStartScale = initialScale;
-          landingZoomStartCameraX = javelin.x - (canvas.width / (2 * initialScale));
-          landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
-          gameState = "landingZoomIn";
-          landingTransitionStartTime = performance.now();
+          // Start landing zoom in transition if not already begun.
+          if (gameState !== "landingZoomIn") {
+            landingZoomStartScale = initialScale;
+            landingZoomStartCameraX = javelin.x - (canvas.width / (2 * initialScale));
+            landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
+            gameState = "landingZoomIn";
+            landingTransitionStartTime = performance.now();
+          }
         }
-        
-        // For flight zoom out transition timing.
         if (gameState === "flightZoomOut") {
           let elapsed = performance.now() - flightTransitionStartTime;
           if (elapsed >= flightTransitionDuration) {
@@ -285,12 +377,14 @@
       const { scale, cameraX } = getCameraAndScale();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
+      // Draw sky.
       let skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
       skyGradient.addColorStop(0, "#87CEEB");
       skyGradient.addColorStop(1, "#B0E0E6");
       ctx.fillStyle = skyGradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
+      // Draw ground.
       ctx.fillStyle = "#228B22";
       ctx.fillRect(0, canvas.height - bottomMargin, canvas.width, bottomMargin);
       
@@ -304,14 +398,14 @@
       ctx.lineTo(foulScreen.screenX, canvas.height);
       ctx.stroke();
       
-      // --- Preview Dots in Aiming Mode ---
+      // --- Draw Aiming Preview Dots ---
       if (gameState === "aiming" && spacePressed) {
         let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
         let angle = minAngle + (maxAngle - minAngle) * angleFactor;
         let initVx = playerSpeed + throwSpeed * Math.cos(angle);
         let initVy = throwSpeed * Math.sin(angle);
         let startX = player.x;
-        let startY = player.y + 0.5; // javelin starting height (m)
+        let startY = player.y + 0.5;
         let numDots = 10;
         let dotInterval = 0.2;
         ctx.fillStyle = "black";
@@ -355,7 +449,6 @@
       } else if (gameState === "flightZoomOut" || gameState === "thrown" ||
                  gameState === "landingZoomIn" || gameState === "landed") {
         let pos = worldToScreen(javelin.x, javelin.y);
-        // Compute the correct screen angle (inverting the y–component).
         let angle = Math.atan2(-javelin.vy, javelin.vx);
         ctx.save();
         ctx.translate(pos.screenX, pos.screenY);
@@ -379,45 +472,10 @@
       }
     }
     
-    // === Input Event Listeners ===
-    document.addEventListener('keydown', function(e) {
-      if (e.code === "Space") {
-        if (gameState === "ready") {
-          gameState = "startTransition";
-          transitionStartTime = performance.now();
-          resultText = "";
-        } else if (gameState === "running") {
-          gameState = "aiming";
-          spacePressed = true;
-          holdStartTime = performance.now();
-          holdDuration = 0;
-        }
-      }
-      if (e.code === "KeyR") {
-        resetGame();
-      }
-    });
-    
-    document.addEventListener('keyup', function(e) {
-      if (e.code === "Space") {
-        if (gameState === "aiming" && spacePressed) {
-          spacePressed = false;
-          let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
-          let angle = minAngle + (maxAngle - minAngle) * angleFactor;
-          javelin.x = player.x;
-          javelin.y = player.y + 0.5;
-          javelin.vx = playerSpeed + throwSpeed * Math.cos(angle);
-          javelin.vy = throwSpeed * Math.sin(angle);
-          frozenPlayerX = player.x;
-          gameState = "flightZoomOut";
-          flightTransitionStartTime = performance.now();
-        }
-      }
-    });
-    
+    // === Reset Game Function ===
     function resetGame() {
       gameState = "ready";
-      resultText = "Press Space to start running (full field view).";
+      resultText = "Press the button or Space to start running.";
       player.x = 0;
       player.y = 0;
       javelin = { x: 0, y: 0, vx: 0, vy: 0 };
