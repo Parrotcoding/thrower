@@ -89,7 +89,7 @@
     // === Field & Scaling Constants ===
     const fieldWidth = 120;            // Field width in meters
     const bottomMargin = 40;           // Bottom margin (pixels)
-    // initialScale: full-field view (zoomed out ~6.67 px/m)
+    // initialScale: full-field view (zoomed out, ~6.67 px/m)
     const initialScale = canvas.width / fieldWidth;
     // finalScale: running view (zoomed in, 50 px/m)
     const finalScale = 50;
@@ -131,7 +131,7 @@
     const throwSpeed = 30;           // m/s
     const minAngle = 20 * Math.PI / 180; // radians
     const maxAngle = 60 * Math.PI / 180; // radians
-    const maxHoldTime = 2000;        // ms maximum for aiming
+    const maxHoldTime = 2000;        // ms max for aiming
     
     // Realistic drag parameters:
     const airDensity = 1.225;        // kg/m³ (sea level)
@@ -142,7 +142,7 @@
     // === World Objects ===
     // Player's x position represents his foot contact with the ground.
     let player = { x: 0, y: 0 };
-    // For the runner, assume a head radius of 0.2 m and total height ~1.8 m.
+    // For the runner, assume head radius 0.2 m and total height ~1.8 m.
     const foulLineX = 30;            // foul (throwing) line (meters)
     
     // The javelin is initially attached to the runner’s hand.
@@ -228,7 +228,6 @@
       } else if (gameState === "aiming") {
         let elapsed = performance.now() - aimTransitionStartTime;
         let fraction = Math.min(elapsed / aimTransitionDuration, 1);
-        // Transition from running view (finalScale) to fixed aiming view (aimingScale)
         scale = finalScale + fraction * (aimingScale - finalScale);
         cameraX = player.x - (canvas.width / (2 * scale));
       } else if (gameState === "flightZoomOut") {
@@ -264,14 +263,16 @@
       };
     }
     
-    // === Draw Landscape: Hills and Trees with Varied Size/Color ===
+    // === Draw Landscape: Multiple Hills and Trees with Varied Size/Color ===
     function drawLandscape() {
       const { scale, cameraX } = getCameraAndScale();
-      // Draw hills:
+      
+      // Draw several hills.
       const hills = [
-        { xStart: 5, xEnd: 35, peakX: 20, peakY: 4, color: "#556B2F" },
-        { xStart: 40, xEnd: 70, peakX: 55, peakY: 3.5, color: "#6B8E23" },
-        { xStart: 75, xEnd: 110, peakX: 92, peakY: 4.5, color: "#2E8B57" }
+        { xStart: 5, xEnd: 35, peakX: 20, peakY: 6, color: "#556B2F" },
+        { xStart: 40, xEnd: 70, peakX: 55, peakY: 5, color: "#6B8E23" },
+        { xStart: 75, xEnd: 110, peakX: 92, peakY: 7, color: "#2E8B57" },
+        { xStart: 100, xEnd: 130, peakX: 115, peakY: 4, color: "#3CB371" }
       ];
       hills.forEach(hill => {
         ctx.fillStyle = hill.color;
@@ -287,13 +288,14 @@
         ctx.fill();
       });
       
-      // Draw trees:
+      // Draw trees with varied sizes and colors.
       const trees = [
         { x: 15, scale: 1.0, trunkColor: "#8B4513", foliageColor: "#228B22" },
         { x: 30, scale: 0.8, trunkColor: "#A0522D", foliageColor: "#006400" },
         { x: 50, scale: 1.2, trunkColor: "#8B4513", foliageColor: "#32CD32" },
         { x: 80, scale: 1.0, trunkColor: "#A0522D", foliageColor: "#228B22" },
-        { x: 100, scale: 0.9, trunkColor: "#8B4513", foliageColor: "#006400" }
+        { x: 100, scale: 0.9, trunkColor: "#8B4513", foliageColor: "#006400" },
+        { x: 120, scale: 1.1, trunkColor: "#8B4513", foliageColor: "#2E8B57" }
       ];
       trees.forEach(tree => {
         drawTree(tree.x, 0, tree.scale, tree.trunkColor, tree.foliageColor);
@@ -306,7 +308,7 @@
       const trunkWidth = 0.2 * treeScale;
       const trunkHeight = 1.0 * treeScale;
       const trunkX = x - trunkWidth / 2;
-      const trunkY = groundY; // bottom of trunk at ground
+      const trunkY = groundY;
       let trunkScreen = worldToScreen(trunkX, trunkY);
       const { scale } = getCameraAndScale();
       ctx.fillStyle = trunkColor;
@@ -323,9 +325,26 @@
       ctx.fill();
     }
     
+    // === Draw Meter Markings (every 5 m) ===
+    function drawMeterMarkings(cameraX, scale) {
+      ctx.fillStyle = "black";
+      ctx.strokeStyle = "black";
+      ctx.font = "12px Arial";
+      let startMark = Math.ceil(cameraX / 5) * 5;
+      let endMark = Math.floor((cameraX + canvas.width / scale) / 5) * 5;
+      for (let m = startMark; m <= endMark; m += 5) {
+        let xPos = (m - cameraX) * scale;
+        ctx.beginPath();
+        ctx.moveTo(xPos, canvas.height - bottomMargin);
+        ctx.lineTo(xPos, canvas.height - bottomMargin + 10);
+        ctx.stroke();
+        ctx.fillText(m + " m", xPos - 15, canvas.height - bottomMargin + 22);
+      }
+    }
+    
     // === Draw Distance Indicator (Sideways Red Raindrop) ===
-    // Before throw (running/aiming/ready): shows meters remaining to foul line.
-    // After throw: shows score (distance traveled from throw point).
+    // Before throw: shows meters remaining to the foul line.
+    // After throw: shows score (distance traveled from the throw point).
     function drawDistanceIndicator() {
       let value, label;
       if (gameState === "running" || gameState === "aiming" || gameState === "ready") {
@@ -371,19 +390,19 @@
     }
     
     // === Draw the Runner (Enhanced Dashing Stick Figure) ===
-    // This function draws a runner with pronounced limb movements and a stronger forward lean.
-    // The head is drawn separately above the shoulders.
+    // This function draws a runner with a strong forward lean and exaggerated limb swings.
+    // His head is drawn separately above the shoulders.
     // Returns the right-hand position (world coordinates) for attaching the javelin.
     function drawRunner(x, scale, time, aiming, aimAngle) {
       const headRadius = 0.2;
       const headY = 1.8;  // Head center
       const bodyTopY = 1.5;
       const hipY = 1.0;
-      // Increase forward lean: shoulders are shifted further ahead.
+      // Increase forward lean: shoulders shift more ahead.
       const shoulderOffset = 0.3;
       const hipOffset = 0.1;
       
-      // Draw head (separate from body).
+      // Draw head (separate circle).
       let shoulderX = x + shoulderOffset;
       let headPos = worldToScreen(shoulderX, headY);
       ctx.fillStyle = "#ffe0bd";
@@ -411,7 +430,7 @@
       ctx.lineTo(leftHandScreen.screenX, leftHandScreen.screenY);
       ctx.stroke();
       
-      // Right arm (holding javelin): if aiming, use aimAngle; else use default with swing.
+      // Right arm (holding javelin): if aiming, use aimAngle; else default with natural swing.
       let defaultArmAngle = (20 * Math.PI / 180) + 0.2 * Math.sin(time * 8);
       let rightArmAngle = aiming ? aimAngle : defaultArmAngle;
       let armLength = 0.5;
@@ -425,7 +444,7 @@
       ctx.lineTo(rightHandScreen.screenX, rightHandScreen.screenY);
       ctx.stroke();
       
-      // Draw legs with more pronounced swing.
+      // Draw legs with pronounced swing.
       let hipPos = worldToScreen(hipX, hipY);
       const rightLegSwing = 0.6 * Math.sin(time * 8);
       const leftLegSwing = 0.6 * Math.sin(time * 8 + Math.PI);
@@ -452,7 +471,7 @@
       let posScreen = worldToScreen(handPos.x, handPos.y);
       ctx.save();
       ctx.translate(posScreen.screenX, posScreen.screenY);
-      ctx.rotate(-angle); // Negative for proper orientation (screen y inverted)
+      ctx.rotate(-angle);
       ctx.strokeStyle = "black";
       ctx.lineWidth = 2;
       ctx.beginPath();
