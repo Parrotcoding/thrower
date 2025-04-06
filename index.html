@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Arcade – Realistic & Cabinet Style</title>
+  <title>Javelin Throwing Arcade – Runner & Trajectory Zoom</title>
   <style>
     body {
       margin: 0;
@@ -40,7 +40,7 @@
       position: relative;
       background: #222;
       height: 120px;
-      /* Create a trapezoid shape using clip-path */
+      /* Trapezoid shape using clip-path */
       clip-path: polygon(10% 0%, 90% 0%, 100% 100%, 0% 100%);
       display: flex;
       align-items: center;
@@ -88,23 +88,23 @@
     const ctx = canvas.getContext('2d');
     
     // === Field & Scaling Constants ===
-    const fieldWidth = 120;            // Field width in meters
-    const bottomMargin = 40;           // Ground margin
+    const fieldWidth = 120; // Field width in meters
+    const bottomMargin = 40; // Ground margin in pixels
     const initialScale = canvas.width / fieldWidth; // Full-field view scale (zoomed out)
-    const finalScale = 50;             // Running view: 1 m = 50 pixels (zoomed in)
-    const aimScale = (initialScale + finalScale) / 2; // Intermediate scale for aiming
+    const finalScale = 50; // Running view: 1 m = 50 px (zoomed in)
+    const aimScale = (initialScale + finalScale) / 2; // Intermediate aiming scale
     
     // === Transition Durations (ms) ===
-    const startTransitionDuration = 1000;       
-    const flightTransitionDuration = 1000;        
-    const landingTransitionDurationIn = 1000;     
+    const startTransitionDuration = 1000;
+    const flightTransitionDuration = 1000;
+    const landingTransitionDurationIn = 1000;
     
     // === Game States ===
     // "ready": waiting (full field view)
     // "startTransition": zooming in to running view
-    // "running": player moving (zoomed in)
-    // "aiming": holding button/space to aim
-    // "flightZoomOut": after throw, zooming out (full field scrolling with javelin)
+    // "running": runner visible (zoomed in)
+    // "aiming": holding control to aim (runner shown, javelin rotates)
+    // "flightZoomOut": after throw, zooming out to full-field view (runner hidden)
     // "thrown": javelin in flight (full field view)
     // "landingZoomIn": after landing, zooming in on landing spot
     // "landed": final view (landing spot, result displayed)
@@ -122,33 +122,39 @@
     let landingCameraX = null;
     
     // === World Physics (SI units) ===
-    const gravity = -9.81;           // m/s² downward
-    const playerSpeed = 7;           // m/s
-    const throwSpeed = 30;           // m/s
-    const minAngle = 20 * Math.PI/180; // radians
-    const maxAngle = 60 * Math.PI/180; // radians
-    const maxHoldTime = 2000;        // ms max aiming
+    const gravity = -9.81; // m/s² downward
+    const playerSpeed = 7; // m/s
+    const throwSpeed = 30; // m/s
+    const minAngle = 20 * Math.PI / 180; // radians
+    const maxAngle = 60 * Math.PI / 180; // radians
+    const maxHoldTime = 2000; // ms max aiming
     
     // Realistic drag parameters:
-    const airDensity = 1.225;        // kg/m³ (sea level)
-    const dragCoefficient = 0.5;     // typical value
-    const javelinArea = 0.007;       // m² (approximate cross-sectional area)
-    const javelinMass = 0.8;         // kg (javelin mass)
+    const airDensity = 1.225; // kg/m³ (sea level)
+    const dragCoefficient = 0.5;
+    const javelinArea = 0.007; // m²
+    const javelinMass = 0.8; // kg
     
     // === World Objects ===
-    let player = { x: 0, y: 0 };      // Starting at 0 m (ground y = 0)
-    const playerRadius = 0.3;        // drawn as circle (meters)
-    const foulLineX = 30;            // foul (throwing) line (meters)
+    // We'll treat player.x as the horizontal foot position.
+    let player = { x: 0, y: 0 }; // y = 0 is ground level.
+    // For the runner, we define approximate body dimensions in meters.
+    // We'll use a head radius of 0.2 m, and total height ~1.8 m.
+    const foulLineX = 30; // meters
     
+    // The javelin object. Before throw it is attached to the runner.
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
-    const javelinLength = 1.2;       // meters
+    const javelinLength = 1.2; // m
     
-    let frozenPlayerX = 0;           // Freeze player's x at throw time
+    let frozenPlayerX = 0; // Freeze player's x at throw time.
     
     // === Input Control Variables ===
     let spacePressed = false;
     let holdStartTime = 0;
     let holdDuration = 0;
+    
+    // Global runner time for animation:
+    let runnerTime = 0;
     
     // === Arcade Button Functions & Keyboard Support ===
     function pressSpace() {
@@ -167,12 +173,12 @@
       if (gameState === "aiming" && spacePressed) {
         spacePressed = false;
         let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
-        let angle = minAngle + (maxAngle - minAngle) * angleFactor;
-        // Set initial javelin conditions.
+        let aimAngle = minAngle + (maxAngle - minAngle) * angleFactor;
+        // When thrown, set javelin based on the aim angle.
         javelin.x = player.x;
-        javelin.y = player.y + 0.5;
-        javelin.vx = playerSpeed + throwSpeed * Math.cos(angle);
-        javelin.vy = throwSpeed * Math.sin(angle);
+        javelin.y = player.y + 1.5; // approximate hand height
+        javelin.vx = playerSpeed + throwSpeed * Math.cos(aimAngle);
+        javelin.vy = throwSpeed * Math.sin(aimAngle);
         frozenPlayerX = player.x;
         gameState = "flightZoomOut";
         flightTransitionStartTime = performance.now();
@@ -268,7 +274,7 @@
     }
     
     // === Draw Distance Indicator (Sideways Red Raindrop) ===
-    // Now shows the field meter (rounded x-coordinate) where the javelin lands (or player's current meter).
+    // Now shows the field meter (rounded x‑coordinate) where the javelin lands (or player's current meter).
     function drawDistanceIndicator() {
       let fieldMeter;
       if (gameState === "thrown" || gameState === "flightZoomOut" ||
@@ -277,7 +283,6 @@
       } else {
         fieldMeter = Math.round(player.x);
       }
-      
       const dropWidth = 60, dropHeight = 30;
       const dropX = canvas.width - dropWidth - 20, dropY = 20;
       
@@ -313,12 +318,105 @@
       javelin.y += javelin.vy * dt;
     }
     
+    // === Draw the Runner (Stick Figure) ===
+    // Draws a runner with feet at (x,0). The runner animates legs using runnerTime.
+    // If 'aiming' is true, the right arm (holding the javelin) is drawn at 'aimAngle' (in radians).
+    // Returns the right-hand position (world coordinates) where the javelin should be drawn.
+    function drawRunner(x, scale, time, aiming, aimAngle) {
+      // Define body parts in world units.
+      const headRadius = 0.2;
+      const headCenterY = 1.7; // head center above ground
+      const bodyTopY = 1.5;
+      const bodyBottomY = 1.0;
+      const hipY = 1.0;
+      
+      // Compute running leg swing using sine wave.
+      const legSwing = 0.2 * Math.sin(time * 6);
+      
+      // Draw head.
+      let headPos = worldToScreen(x, headCenterY);
+      ctx.fillStyle = "#ffe0bd";
+      ctx.beginPath();
+      ctx.arc(headPos.screenX, headPos.screenY, headRadius * scale, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Draw body.
+      let bodyTop = worldToScreen(x, bodyTopY);
+      let bodyBottom = worldToScreen(x, bodyBottomY);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(bodyTop.screenX, bodyTop.screenY);
+      ctx.lineTo(bodyBottom.screenX, bodyBottom.screenY);
+      ctx.stroke();
+      
+      // Draw arms.
+      // Left arm: fixed.
+      let leftHand = { x: x - 0.3, y: bodyTopY - 0.2 };
+      let leftHandScreen = worldToScreen(leftHand.x, leftHand.y);
+      ctx.beginPath();
+      ctx.moveTo(bodyTop.screenX, bodyTop.screenY);
+      ctx.lineTo(leftHandScreen.screenX, leftHandScreen.screenY);
+      ctx.stroke();
+      
+      // Right arm (holding javelin): if aiming, use aimAngle; otherwise, use default angle (e.g., 20°)
+      let defaultArmAngle = 20 * Math.PI / 180;
+      let rightArmAngle = aiming ? aimAngle : defaultArmAngle;
+      // Compute right hand position: length ~0.4 m.
+      let handLength = 0.4;
+      let rightHand = { 
+        x: x + handLength * Math.cos(rightArmAngle), 
+        y: bodyTopY - handLength * Math.sin(rightArmAngle) 
+      };
+      let rightHandScreen = worldToScreen(rightHand.x, rightHand.y);
+      ctx.beginPath();
+      ctx.moveTo(bodyTop.screenX, bodyTop.screenY);
+      ctx.lineTo(rightHandScreen.screenX, rightHandScreen.screenY);
+      ctx.stroke();
+      
+      // Draw legs (using simple animation).
+      // Right leg.
+      let rightLegEnd = { x: x + 0.2 * legSwing, y: 0 };
+      let rightLegScreen = worldToScreen(rightLegEnd.x, rightLegEnd.y);
+      ctx.beginPath();
+      ctx.moveTo(worldToScreen(x, hipY).screenX, worldToScreen(x, hipY).screenY);
+      ctx.lineTo(rightLegScreen.screenX, rightLegScreen.screenY);
+      ctx.stroke();
+      // Left leg.
+      let leftLegEnd = { x: x - 0.2 * legSwing, y: 0 };
+      let leftLegScreen = worldToScreen(leftLegEnd.x, leftLegEnd.y);
+      ctx.beginPath();
+      ctx.moveTo(worldToScreen(x, hipY).screenX, worldToScreen(x, hipY).screenY);
+      ctx.lineTo(leftLegScreen.screenX, leftLegScreen.screenY);
+      ctx.stroke();
+      
+      // Return the right hand position (world coordinates) to attach the javelin.
+      return rightHand;
+    }
+    
+    // === Draw Javelin Attached to Runner's Hand ===
+    function drawJavelinAtHand(handPos, scale, angle) {
+      let posScreen = worldToScreen(handPos.x, handPos.y);
+      ctx.save();
+      ctx.translate(posScreen.screenX, posScreen.screenY);
+      ctx.rotate(-angle); // Negative because screen y is inverted.
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(javelinLength * scale, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+    
     // === Main Game Loop ===
     let lastTime = 0;
     function gameLoop(timestamp) {
       if (!lastTime) lastTime = timestamp;
       const dt = (timestamp - lastTime) / 1000;
       lastTime = timestamp;
+      
+      runnerTime += dt;
       
       update(dt);
       draw();
@@ -404,51 +502,21 @@
       ctx.lineTo(foulScreen.screenX, canvas.height);
       ctx.stroke();
       
-      if (gameState === "aiming" && spacePressed) {
-        let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
-        let angle = minAngle + (maxAngle - minAngle) * angleFactor;
-        let initVx = playerSpeed + throwSpeed * Math.cos(angle);
-        let initVy = throwSpeed * Math.sin(angle);
-        let startX = player.x, startY = player.y + 0.5;
-        let numDots = 10, dotInterval = 0.2;
-        ctx.fillStyle = "black";
-        for (let i = 1; i <= numDots; i++) {
-          let t = i * dotInterval;
-          let dotX = startX + initVx * t;
-          let dotY = startY + initVy * t + 0.5 * gravity * t * t;
-          if (dotY < 0) break;
-          let pos = worldToScreen(dotX, dotY);
-          let dotRadius = 0.1 * scale;
-          ctx.beginPath();
-          ctx.arc(pos.screenX, pos.screenY, dotRadius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-      
+      // If in running or aiming state, draw the runner and attached javelin.
       if (gameState === "running" || gameState === "aiming") {
-        let playerScreen = worldToScreen(player.x, player.y);
-        ctx.fillStyle = "#0000FF";
-        ctx.beginPath();
-        ctx.arc(playerScreen.screenX, playerScreen.screenY, playerRadius * scale, 0, Math.PI * 2);
-        ctx.fill();
+        // Compute aimAngle if in aiming state, otherwise use default (20°).
+        let currentAimAngle = (gameState === "aiming") 
+                              ? (minAngle + (maxAngle - minAngle) * Math.min(holdDuration, maxHoldTime) / maxHoldTime)
+                              : (20 * Math.PI / 180);
+        // Draw the runner; this returns the right-hand position.
+        let rightHandPos = drawRunner(player.x, scale, runnerTime, gameState === "aiming", currentAimAngle);
+        // Draw the javelin attached to the right hand.
+        drawJavelinAtHand(rightHandPos, scale, currentAimAngle);
       }
       
-      if (gameState === "aiming") {
-        let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
-        let angle = minAngle + (maxAngle - minAngle) * angleFactor;
-        let pos = worldToScreen(player.x, player.y + 0.5);
-        ctx.save();
-        ctx.translate(pos.screenX, pos.screenY);
-        ctx.rotate(-angle);
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(javelinLength * scale, 0);
-        ctx.stroke();
-        ctx.restore();
-      } else if (gameState === "flightZoomOut" || gameState === "thrown" ||
-                 gameState === "landingZoomIn" || gameState === "landed") {
+      // For flight and later states, draw the javelin from physics.
+      if (gameState === "flightZoomOut" || gameState === "thrown" ||
+          gameState === "landingZoomIn" || gameState === "landed") {
         let pos = worldToScreen(javelin.x, javelin.y);
         let angle = Math.atan2(-javelin.vy, javelin.vx);
         ctx.save();
