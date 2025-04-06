@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Arcade – Dashing Runner & Landscape</title>
+  <title>Javelin Throwing Arcade – Landscape, Runner & Score</title>
   <style>
     body {
       margin: 0;
@@ -87,20 +87,20 @@
     const ctx = canvas.getContext('2d');
     
     // === Field & Scaling Constants ===
-    const fieldWidth = 120;  // Field width in meters
-    const bottomMargin = 40; // Bottom margin in pixels
+    const fieldWidth = 120;            // Field width in meters
+    const bottomMargin = 40;           // Bottom margin (pixels)
     // initialScale: full-field view (zoomed out ~6.67 px/m)
     const initialScale = canvas.width / fieldWidth;
     // finalScale: running view (zoomed in, 50 px/m)
     const finalScale = 50;
-    // aimingScale: fixed zoom level when aiming (e.g., 30 px/m)
+    // aimingScale: fixed zoom for aiming (e.g., 30 px/m)
     const aimingScale = 30;
     
     // === Transition Durations (ms) ===
     const startTransitionDuration = 1000;
     const flightTransitionDuration = 1000;
     const landingTransitionDurationIn = 1000;
-    const aimTransitionDuration = 500;  // Transition to aiming view
+    const aimTransitionDuration = 500; // Transition to aiming view
     
     // === Game States ===
     // "ready": waiting (full field view)
@@ -126,30 +126,30 @@
     let landingCameraX = null;
     
     // === World Physics (SI units) ===
-    const gravity = -9.81;  // m/s² downward
-    const playerSpeed = 7;  // m/s
-    const throwSpeed = 30;  // m/s
-    const minAngle = 20 * Math.PI / 180;  // radians
-    const maxAngle = 60 * Math.PI / 180;  // radians
-    const maxHoldTime = 2000;  // ms maximum for aiming
+    const gravity = -9.81;           // m/s² downward
+    const playerSpeed = 7;           // m/s
+    const throwSpeed = 30;           // m/s
+    const minAngle = 20 * Math.PI / 180; // radians
+    const maxAngle = 60 * Math.PI / 180; // radians
+    const maxHoldTime = 2000;        // ms maximum for aiming
     
     // Realistic drag parameters:
-    const airDensity = 1.225;  // kg/m³ (sea level)
+    const airDensity = 1.225;        // kg/m³ (sea level)
     const dragCoefficient = 0.5;
-    const javelinArea = 0.007; // m²
-    const javelinMass = 0.8;   // kg
+    const javelinArea = 0.007;       // m²
+    const javelinMass = 0.8;         // kg
     
     // === World Objects ===
-    // The player's x position represents his foot contact with the ground.
+    // Player's x position represents his foot contact with the ground.
     let player = { x: 0, y: 0 };
-    // For the runner, assume head radius 0.2 m, total height ~1.8 m.
-    const foulLineX = 30;  // meters
+    // For the runner, assume a head radius of 0.2 m and total height ~1.8 m.
+    const foulLineX = 30;            // foul (throwing) line (meters)
     
     // The javelin is initially attached to the runner’s hand.
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
-    const javelinLength = 1.2; // m
+    const javelinLength = 1.2;       // m
     
-    let frozenPlayerX = 0;  // Freeze player's x at throw time.
+    let frozenPlayerX = 0;           // Freeze player's x at throw time.
     
     // === Input Control Variables ===
     let spacePressed = false;
@@ -178,7 +178,7 @@
         spacePressed = false;
         let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
         let aimAngle = minAngle + (maxAngle - minAngle) * angleFactor;
-        // Set javelin initial conditions based on the aim.
+        // Set javelin initial conditions based on aim.
         javelin.x = player.x;
         javelin.y = player.y + 1.5; // approximate hand height
         javelin.vx = playerSpeed + throwSpeed * Math.cos(aimAngle);
@@ -264,63 +264,76 @@
       };
     }
     
-    // === Draw Landscape (Background Hills) ===
+    // === Draw Landscape: Hills and Trees with Varied Size/Color ===
     function drawLandscape() {
       const { scale, cameraX } = getCameraAndScale();
-      // Draw two hills using quadratic curves in world coordinates.
-      // Hill 1: from x=10 to x=40 with peak at (25,3)
-      ctx.fillStyle = "#556B2F";
-      ctx.beginPath();
-      let p1 = worldToScreen(10, 0);
-      ctx.moveTo(p1.screenX, p1.screenY);
-      let pPeak = worldToScreen(25, 3);
-      let p2 = worldToScreen(40, 0);
-      ctx.quadraticCurveTo(pPeak.screenX, pPeak.screenY, p2.screenX, p2.screenY);
-      ctx.lineTo(p2.screenX, canvas.height - bottomMargin);
-      ctx.lineTo(p1.screenX, canvas.height - bottomMargin);
-      ctx.closePath();
-      ctx.fill();
+      // Draw hills:
+      const hills = [
+        { xStart: 5, xEnd: 35, peakX: 20, peakY: 4, color: "#556B2F" },
+        { xStart: 40, xEnd: 70, peakX: 55, peakY: 3.5, color: "#6B8E23" },
+        { xStart: 75, xEnd: 110, peakX: 92, peakY: 4.5, color: "#2E8B57" }
+      ];
+      hills.forEach(hill => {
+        ctx.fillStyle = hill.color;
+        ctx.beginPath();
+        let start = worldToScreen(hill.xStart, 0);
+        ctx.moveTo(start.screenX, start.screenY);
+        let peak = worldToScreen(hill.peakX, hill.peakY);
+        let end = worldToScreen(hill.xEnd, 0);
+        ctx.quadraticCurveTo(peak.screenX, peak.screenY, end.screenX, end.screenY);
+        ctx.lineTo(end.screenX, canvas.height - bottomMargin);
+        ctx.lineTo(start.screenX, canvas.height - bottomMargin);
+        ctx.closePath();
+        ctx.fill();
+      });
       
-      // Hill 2: from x=50 to x=90 with peak at (70,2.5)
-      ctx.fillStyle = "#6B8E23";
-      ctx.beginPath();
-      let q1 = worldToScreen(50, 0);
-      ctx.moveTo(q1.screenX, q1.screenY);
-      let qPeak = worldToScreen(70, 2.5);
-      let q2 = worldToScreen(90, 0);
-      ctx.quadraticCurveTo(qPeak.screenX, qPeak.screenY, q2.screenX, q2.screenY);
-      ctx.lineTo(q2.screenX, canvas.height - bottomMargin);
-      ctx.lineTo(q1.screenX, canvas.height - bottomMargin);
-      ctx.closePath();
-      ctx.fill();
+      // Draw trees:
+      const trees = [
+        { x: 15, scale: 1.0, trunkColor: "#8B4513", foliageColor: "#228B22" },
+        { x: 30, scale: 0.8, trunkColor: "#A0522D", foliageColor: "#006400" },
+        { x: 50, scale: 1.2, trunkColor: "#8B4513", foliageColor: "#32CD32" },
+        { x: 80, scale: 1.0, trunkColor: "#A0522D", foliageColor: "#228B22" },
+        { x: 100, scale: 0.9, trunkColor: "#8B4513", foliageColor: "#006400" }
+      ];
+      trees.forEach(tree => {
+        drawTree(tree.x, 0, tree.scale, tree.trunkColor, tree.foliageColor);
+      });
     }
     
-    // === Draw Meter Markings (every 5 m) ===
-    function drawMeterMarkings(cameraX, scale) {
-      ctx.fillStyle = "black";
-      ctx.strokeStyle = "black";
-      ctx.font = "12px Arial";
-      let startMark = Math.ceil(cameraX / 5) * 5;
-      let endMark = Math.floor((cameraX + canvas.width / scale) / 5) * 5;
-      for (let m = startMark; m <= endMark; m += 5) {
-        let xPos = (m - cameraX) * scale;
-        ctx.beginPath();
-        ctx.moveTo(xPos, canvas.height - bottomMargin);
-        ctx.lineTo(xPos, canvas.height - bottomMargin + 10);
-        ctx.stroke();
-        ctx.fillText(m + " m", xPos - 15, canvas.height - bottomMargin + 22);
-      }
+    // Draw a single tree at world x, ground y with a given treeScale.
+    function drawTree(x, groundY, treeScale, trunkColor, foliageColor) {
+      // Trunk dimensions (in meters)
+      const trunkWidth = 0.2 * treeScale;
+      const trunkHeight = 1.0 * treeScale;
+      const trunkX = x - trunkWidth / 2;
+      const trunkY = groundY; // bottom of trunk at ground
+      let trunkScreen = worldToScreen(trunkX, trunkY);
+      const { scale } = getCameraAndScale();
+      ctx.fillStyle = trunkColor;
+      ctx.fillRect(trunkScreen.screenX, trunkScreen.screenY - trunkHeight * scale, trunkWidth * scale, trunkHeight * scale);
+      
+      // Foliage: a circle above the trunk.
+      const foliageRadius = 0.5 * treeScale;
+      const foliageX = x;
+      const foliageY = groundY + trunkHeight + foliageRadius;
+      let foliageScreen = worldToScreen(foliageX, foliageY);
+      ctx.fillStyle = foliageColor;
+      ctx.beginPath();
+      ctx.arc(foliageScreen.screenX, foliageScreen.screenY, foliageRadius * scale, 0, Math.PI * 2);
+      ctx.fill();
     }
     
     // === Draw Distance Indicator (Sideways Red Raindrop) ===
-    // Score is calculated as the horizontal distance the javelin traveled from the throw point.
+    // Before throw (running/aiming/ready): shows meters remaining to foul line.
+    // After throw: shows score (distance traveled from throw point).
     function drawDistanceIndicator() {
-      let score;
-      if (gameState === "thrown" || gameState === "flightZoomOut" ||
-          gameState === "landingZoomIn" || gameState === "landed") {
-        score = Math.floor(javelin.x - frozenPlayerX);
+      let value, label;
+      if (gameState === "running" || gameState === "aiming" || gameState === "ready") {
+        value = Math.floor(foulLineX - player.x);
+        label = "To Foul: ";
       } else {
-        score = Math.floor(player.x);
+        value = Math.floor(javelin.x - frozenPlayerX);
+        label = "Score: ";
       }
       const dropWidth = 60, dropHeight = 30;
       const dropX = canvas.width - dropWidth - 20, dropY = 20;
@@ -337,7 +350,7 @@
       ctx.font = "bold 16px Arial";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("Score: " + score + " m", dropX + dropWidth / 2, dropY + dropHeight / 2);
+      ctx.fillText(label + value + " m", dropX + dropWidth / 2, dropY + dropHeight / 2);
     }
     
     // === Realistic Javelin Physics Update Function ===
@@ -358,19 +371,19 @@
     }
     
     // === Draw the Runner (Enhanced Dashing Stick Figure) ===
-    // This function draws a runner with a pronounced forward lean,
-    // more pronounced limb swings, and a separately drawn head.
+    // This function draws a runner with pronounced limb movements and a stronger forward lean.
+    // The head is drawn separately above the shoulders.
     // Returns the right-hand position (world coordinates) for attaching the javelin.
     function drawRunner(x, scale, time, aiming, aimAngle) {
       const headRadius = 0.2;
-      const headY = 1.8;  // Draw head slightly higher than shoulders
+      const headY = 1.8;  // Head center
       const bodyTopY = 1.5;
       const hipY = 1.0;
-      // Increase forward lean: shoulders are significantly ahead.
-      const shoulderOffset = 0.3; // shoulders ahead of foot contact
-      const hipOffset = 0.1;      // hips slightly ahead
+      // Increase forward lean: shoulders are shifted further ahead.
+      const shoulderOffset = 0.3;
+      const hipOffset = 0.1;
       
-      // Draw head (as a separate circle, not connected by a neck line).
+      // Draw head (separate from body).
       let shoulderX = x + shoulderOffset;
       let headPos = worldToScreen(shoulderX, headY);
       ctx.fillStyle = "#ffe0bd";
@@ -398,7 +411,7 @@
       ctx.lineTo(leftHandScreen.screenX, leftHandScreen.screenY);
       ctx.stroke();
       
-      // Right arm (holding javelin): if aiming, use aimAngle; otherwise, add natural swing.
+      // Right arm (holding javelin): if aiming, use aimAngle; else use default with swing.
       let defaultArmAngle = (20 * Math.PI / 180) + 0.2 * Math.sin(time * 8);
       let rightArmAngle = aiming ? aimAngle : defaultArmAngle;
       let armLength = 0.5;
@@ -431,7 +444,6 @@
       ctx.lineTo(leftLegScreen.screenX, leftLegScreen.screenY);
       ctx.stroke();
       
-      // Return the right-hand position (world coordinates) to attach the javelin.
       return rightHand;
     }
     
@@ -440,7 +452,7 @@
       let posScreen = worldToScreen(handPos.x, handPos.y);
       ctx.save();
       ctx.translate(posScreen.screenX, posScreen.screenY);
-      ctx.rotate(-angle);
+      ctx.rotate(-angle); // Negative for proper orientation (screen y inverted)
       ctx.strokeStyle = "black";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -534,7 +546,7 @@
       // Draw background landscape.
       drawLandscape();
       
-      // Draw ground (a green rectangle covering bottom of canvas).
+      // Draw ground.
       ctx.fillStyle = "#228B22";
       ctx.fillRect(0, canvas.height - bottomMargin, canvas.width, bottomMargin);
       
@@ -548,7 +560,7 @@
       ctx.lineTo(foulScreen.screenX, canvas.height);
       ctx.stroke();
       
-      // In running or aiming state, draw the runner with attached javelin.
+      // In running or aiming state, draw the runner with the attached javelin.
       if (gameState === "running" || gameState === "aiming") {
         let currentAimAngle = (gameState === "aiming")
           ? (minAngle + (maxAngle - minAngle) * Math.min(holdDuration, maxHoldTime) / maxHoldTime)
