@@ -87,26 +87,26 @@
     const ctx = canvas.getContext('2d');
     
     // === Field & Scaling Constants ===
-    const fieldWidth = 120; // Field width in meters
-    const bottomMargin = 40; // Bottom margin (pixels)
+    const fieldWidth = 120;            // Field width in meters
+    const bottomMargin = 40;           // Bottom margin (pixels)
     // initialScale: full-field view (zoomed out)
     const initialScale = canvas.width / fieldWidth; // ~6.67 px/m
     // finalScale: running view (zoomed in)
-    const finalScale = 50; // 50 px/m
-    // aimingScale: preset zoom for aiming (a natural zoom-out)
-    const aimingScale = 30; // intermediate zoom (px/m)
+    const finalScale = 50;             // 50 px/m
+    // aimingScale: fixed zoom level for aiming
+    const aimingScale = 30;            // 30 px/m (zoomed out)
     
     // === Transition Durations (ms) ===
     const startTransitionDuration = 1000;
     const flightTransitionDuration = 1000;
     const landingTransitionDurationIn = 1000;
-    const aimTransitionDuration = 500; // Fixed transition to aiming zoom
+    const aimTransitionDuration = 500; // Duration to transition into aiming view
     
     // === Game States ===
     // "ready": waiting (full field view)
     // "startTransition": zooming in to running view
     // "running": runner visible (zoomed in)
-    // "aiming": control held to aim; camera smoothly transitions to aimingScale
+    // "aiming": control held to aim; camera transitions to aimingScale
     // "flightZoomOut": after throw, zooming out to full-field view (runner hidden)
     // "thrown": javelin in flight (full field view)
     // "landingZoomIn": after landing, zooming in on landing spot
@@ -126,30 +126,30 @@
     let landingCameraX = null;
     
     // === World Physics (SI units) ===
-    const gravity = -9.81; // m/s² downward
-    const playerSpeed = 7; // m/s
-    const throwSpeed = 30; // m/s
+    const gravity = -9.81;           // m/s² downward
+    const playerSpeed = 7;           // m/s
+    const throwSpeed = 30;           // m/s
     const minAngle = 20 * Math.PI / 180; // radians
     const maxAngle = 60 * Math.PI / 180; // radians
-    const maxHoldTime = 2000; // ms maximum for aiming
+    const maxHoldTime = 2000;        // ms max aiming
     
     // Realistic drag parameters:
-    const airDensity = 1.225; // kg/m³ (sea level)
+    const airDensity = 1.225;        // kg/m³ (sea level)
     const dragCoefficient = 0.5;
-    const javelinArea = 0.007; // m²
-    const javelinMass = 0.8; // kg
+    const javelinArea = 0.007;       // m²
+    const javelinMass = 0.8;         // kg
     
     // === World Objects ===
-    // The player's x position represents his foot contact with the ground.
+    // Player's x position represents his foot contact with the ground.
     let player = { x: 0, y: 0 };
     // For the runner, assume a head radius of 0.2 m and total height ~1.8 m.
-    const foulLineX = 30; // meters
+    const foulLineX = 30;            // foul (throwing) line (meters)
     
     // The javelin is initially attached to the runner’s hand.
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
-    const javelinLength = 1.2; // m
+    const javelinLength = 1.2;       // m
     
-    let frozenPlayerX = 0; // Freeze player's x at throw time.
+    let frozenPlayerX = 0;           // Freeze player's x at throw time.
     
     // === Input Control Variables ===
     let spacePressed = false;
@@ -186,7 +186,6 @@
         frozenPlayerX = player.x;
         gameState = "flightZoomOut";
         flightTransitionStartTime = performance.now();
-        // Reset aim transition timer.
         aimTransitionStartTime = null;
       }
     }
@@ -227,9 +226,9 @@
         scale = finalScale;
         cameraX = player.x - (canvas.width / (2 * finalScale));
       } else if (gameState === "aiming") {
-        // Smoothly transition from running view to a fixed aiming zoom (aimingScale)
         let elapsed = performance.now() - aimTransitionStartTime;
         let fraction = Math.min(elapsed / aimTransitionDuration, 1);
+        // Transition from running view (finalScale) to aiming view (aimingScale)
         scale = finalScale + fraction * (aimingScale - finalScale);
         cameraX = player.x - (canvas.width / (2 * scale));
       } else if (gameState === "flightZoomOut") {
@@ -283,7 +282,7 @@
     }
     
     // === Draw Distance Indicator (Sideways Red Raindrop) ===
-    // Now, the score is calculated as the horizontal distance (in meters) traveled by the javelin from the throw point.
+    // Score is the horizontal distance traveled by the javelin from the throw point.
     function drawDistanceIndicator() {
       let score;
       if (gameState === "thrown" || gameState === "flightZoomOut" ||
@@ -327,32 +326,31 @@
       javelin.y += javelin.vy * dt;
     }
     
-    // === Draw the Runner (Enhanced Stick Figure with Dashing Animation) ===
-    // The runner now has a forward lean so his shoulders (where his arms attach) are ahead of his hips.
-    // Returns the right-hand position (world coordinates) for attaching the javelin.
+    // === Draw the Runner (Enhanced Dashing Stick Figure) ===
+    // This function draws a runner with a forward lean.
+    // The shoulders (where arms attach) are shifted forward relative to the feet.
+    // The head is drawn separately (not attached by a line) at the shoulder level.
+    // It returns the right-hand position (world coordinates) for attaching the javelin.
     function drawRunner(x, scale, time, aiming, aimAngle) {
       const headRadius = 0.2;
-      const headY = 1.7; // Head center
+      const headY = 1.8;      // Head center (drawn separately)
       const bodyTopY = 1.5;
       const hipY = 1.0;
-      // For a forward lean, the shoulders are ahead of the feet and hips.
-      const leanOffset = 0.15;
+      // Increase forward lean: shoulders are further ahead; hips are shifted slightly forward.
+      const shoulderOffset = 0.25; // shoulders ahead of foot contact
+      const hipOffset = 0.05;      // hips slightly ahead of foot contact
       
-      // Leg swing: increased amplitude and frequency for dashing.
-      const rightLegSwing = 0.4 * Math.sin(time * 8);
-      const leftLegSwing = 0.4 * Math.sin(time * 8 + Math.PI);
-      
-      // Draw head.
-      let headPos = worldToScreen(x, headY);
+      // Draw head (separate, not connected by a neck line).
+      let shoulderX = x + shoulderOffset;
+      let headPos = worldToScreen(shoulderX, headY);
       ctx.fillStyle = "#ffe0bd";
       ctx.beginPath();
       ctx.arc(headPos.screenX, headPos.screenY, headRadius * scale, 0, Math.PI * 2);
       ctx.fill();
       
-      // Compute shoulder (bodyTop) and hip positions.
-      let shoulderX = x + leanOffset;  // shoulders ahead of foot position
-      let hipX = x - leanOffset;       // hips behind foot position
+      // Draw body: from shoulder to hip.
       let bodyTop = worldToScreen(shoulderX, bodyTopY);
+      let hipX = x + hipOffset;
       let bodyBottom = worldToScreen(hipX, hipY);
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 3;
@@ -370,7 +368,8 @@
       ctx.lineTo(leftHandScreen.screenX, leftHandScreen.screenY);
       ctx.stroke();
       
-      // Right arm (holding javelin): if aiming, use aimAngle; else default with slight swing.
+      // Right arm (holding javelin).
+      // If aiming, use aimAngle; else use a default angle with slight swing.
       let defaultArmAngle = (20 * Math.PI / 180) + 0.1 * Math.sin(time * 8);
       let rightArmAngle = aiming ? aimAngle : defaultArmAngle;
       let armLength = 0.5;
@@ -386,7 +385,10 @@
       
       // Draw legs.
       let hipPos = worldToScreen(hipX, hipY);
-      // Right leg.
+      // Increase leg swing amplitude for a dashing effect.
+      const rightLegSwing = 0.5 * Math.sin(time * 8);
+      const leftLegSwing = 0.5 * Math.sin(time * 8 + Math.PI);
+      // Right leg: from hip; lean forward slightly.
       let rightLegEnd = { x: x + 0.2 * rightLegSwing, y: 0 };
       let rightLegScreen = worldToScreen(rightLegEnd.x, rightLegEnd.y);
       ctx.beginPath();
@@ -401,6 +403,7 @@
       ctx.lineTo(leftLegScreen.screenX, leftLegScreen.screenY);
       ctx.stroke();
       
+      // Return the right-hand position (world coordinates) for the javelin.
       return rightHand;
     }
     
@@ -409,7 +412,7 @@
       let posScreen = worldToScreen(handPos.x, handPos.y);
       ctx.save();
       ctx.translate(posScreen.screenX, posScreen.screenY);
-      ctx.rotate(-angle); // Negative because of screen y inversion.
+      ctx.rotate(-angle);
       ctx.strokeStyle = "black";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -512,7 +515,7 @@
       ctx.lineTo(foulScreen.screenX, canvas.height);
       ctx.stroke();
       
-      // In running or aiming state, draw the runner and the javelin attached to his hand.
+      // When in running or aiming state, draw the runner with attached javelin.
       if (gameState === "running" || gameState === "aiming") {
         let currentAimAngle = (gameState === "aiming")
           ? (minAngle + (maxAngle - minAngle) * Math.min(holdDuration, maxHoldTime) / maxHoldTime)
@@ -521,7 +524,7 @@
         drawJavelinAtHand(rightHandPos, scale, currentAimAngle);
       }
       
-      // In flight and later states, draw the javelin from its physics.
+      // For flight and later states, draw the javelin from physics.
       if (gameState === "flightZoomOut" || gameState === "thrown" ||
           gameState === "landingZoomIn" || gameState === "landed") {
         let pos = worldToScreen(javelin.x, javelin.y);
