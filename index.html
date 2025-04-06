@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Arcade – Advanced Runner</title>
+  <title>Javelin Throwing Arcade – Advanced Runner with Variable Speed</title>
   <style>
     body {
       margin: 0;
@@ -11,7 +11,6 @@
       color: #fff;
       text-align: center;
     }
-    /* Arcade cabinet container */
     #cabinet {
       width: 840px;
       margin: 40px auto;
@@ -21,7 +20,6 @@
       box-shadow: 0 0 20px #000;
       overflow: hidden;
     }
-    /* Game screen */
     #screen {
       background: #87CEEB;
       position: relative;
@@ -35,7 +33,6 @@
       box-shadow: inset 0 0 10px #000;
       background: #87CEEB;
     }
-    /* Control panel */
     #controls {
       position: relative;
       background: #222;
@@ -94,7 +91,8 @@
     const landingTransitionDurationIn = 1000;
     const aimTransitionDuration = 500;
     
-    // Game States: "ready", "startTransition", "running", "aiming", "flightZoomOut", "thrown", "landingZoomIn", "landed", "foul"
+    // Game States: "ready", "startTransition", "running", "aiming", "flightZoomOut",
+    // "thrown", "landingZoomIn", "landed", "foul"
     let gameState = "ready";
     let resultText = "Press the button or Space to start running.";
     
@@ -107,26 +105,28 @@
     let landingZoomStartScale = null;
     let landingCameraX = null;
     
-    // Physics
+    // Physics parameters
     const gravity = -9.81;
     const playerSpeed = 7;
-    const throwSpeed = 30; // constant throw speed
-    const minAngle = 20 * Math.PI/180;
-    const maxAngle = 60 * Math.PI/180;
-    const maxHoldTime = 2000; // only for aim angle interpolation
+    const throwSpeed = 20; // Base throw speed (m/s)
+    const extraSpeedMax = 5; // Extra speed added if spacebar is held full duration
+    const minAngle = 20 * Math.PI / 180;
+    const maxAngle = 60 * Math.PI / 180;
+    const maxHoldTime = 2000; // ms for max extra speed & angle interpolation
     
+    // Drag parameters (increased for more air resistance)
     const airDensity = 1.225;
-    const dragCoefficient = 0.5;
+    const dragCoefficient = 1.0;
     const javelinArea = 0.007;
     const javelinMass = 0.8;
     
-    // World Objects
-    let player = { x: 0, y: 0 };      // player's foot contact point (y=0)
-    const foulLineX = 30;            // meters
+    // World objects
+    let player = { x: 0, y: 0 }; // player's foot at y=0
+    const foulLineX = 30;
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
-    const javelinLength = 1.2;       // meters
+    const javelinLength = 1.2;
     let frozenPlayerX = 0;
-    let finalAngle = 0;              // computed from approach
+    let finalAngle = 0;
     
     // Input Variables
     let spacePressed = false;
@@ -136,12 +136,12 @@
     
     // === Arcade Button & Keyboard Functions ===
     function pressSpace() {
-      if(gameState==="ready") {
-        gameState="startTransition";
+      if (gameState === "ready") {
+        gameState = "startTransition";
         transitionStartTime = performance.now();
         resultText = "";
-      } else if(gameState==="running") {
-        gameState="aiming";
+      } else if (gameState === "running") {
+        gameState = "aiming";
         spacePressed = true;
         holdStartTime = performance.now();
         holdDuration = 0;
@@ -149,16 +149,19 @@
       }
     }
     function releaseSpace() {
-      if(gameState==="aiming" && spacePressed) {
+      if (gameState === "aiming" && spacePressed) {
         spacePressed = false;
-        let angleFactor = Math.min(holdDuration, maxHoldTime)/maxHoldTime;
-        let aimAngle = minAngle + (maxAngle - minAngle)*angleFactor;
+        let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+        let aimAngle = minAngle + (maxAngle - minAngle) * angleFactor;
+        // Increase throw speed slightly as space is held longer.
+        let extraSpeed = extraSpeedMax * (Math.min(holdDuration, maxHoldTime) / maxHoldTime);
+        let finalThrowSpeed = throwSpeed + extraSpeed;
         javelin.x = player.x;
         javelin.y = player.y + 1.5;
-        javelin.vx = playerSpeed + throwSpeed * Math.cos(aimAngle);
-        javelin.vy = throwSpeed * Math.sin(aimAngle);
+        javelin.vx = playerSpeed + finalThrowSpeed * Math.cos(aimAngle);
+        javelin.vy = finalThrowSpeed * Math.sin(aimAngle);
         frozenPlayerX = player.x;
-        gameState="flightZoomOut";
+        gameState = "flightZoomOut";
         flightTransitionStartTime = performance.now();
         aimTransitionStartTime = null;
       }
@@ -177,54 +180,54 @@
     });
     
     document.addEventListener('keydown', function(e) {
-      if(e.code==="Space") { pressSpace(); }
-      if(e.code==="KeyR") { resetGame(); }
+      if(e.code === "Space") { pressSpace(); }
+      if(e.code === "KeyR") { resetGame(); }
     });
     document.addEventListener('keyup', function(e) {
-      if(e.code==="Space") { releaseSpace(); }
+      if(e.code === "Space") { releaseSpace(); }
     });
     
     // === Camera & Scale Functions ===
     function getCameraAndScale() {
       let scale, cameraX;
-      if(gameState==="ready") {
+      if (gameState === "ready") {
         scale = initialScale;
         cameraX = 0;
-      } else if(gameState==="startTransition") {
-        let elapsed = performance.now()-transitionStartTime;
-        let fraction = Math.min(elapsed/startTransitionDuration,1);
-        scale = initialScale + fraction*(finalScale-initialScale);
-        let runningCameraX = player.x - (canvas.width/(2*finalScale));
+      } else if (gameState === "startTransition") {
+        let elapsed = performance.now() - transitionStartTime;
+        let fraction = Math.min(elapsed / startTransitionDuration, 1);
+        scale = initialScale + fraction * (finalScale - initialScale);
+        let runningCameraX = player.x - (canvas.width / (2 * finalScale));
         cameraX = fraction * runningCameraX;
-      } else if(gameState==="running") {
+      } else if (gameState === "running") {
         scale = finalScale;
-        cameraX = player.x - (canvas.width/(2*finalScale));
-      } else if(gameState==="aiming") {
-        let elapsed = performance.now()-aimTransitionStartTime;
-        let fraction = Math.min(elapsed/aimTransitionDuration,1);
-        scale = finalScale + fraction*(aimingScale-finalScale);
-        cameraX = player.x - (canvas.width/(2*scale));
-      } else if(gameState==="flightZoomOut") {
-        let elapsed = performance.now()-flightTransitionStartTime;
-        let fraction = Math.min(elapsed/flightTransitionDuration,1);
-        scale = finalScale + fraction*(initialScale-finalScale);
-        let runningCameraX = frozenPlayerX - (canvas.width/(2*finalScale));
-        let fullFieldCameraX = javelin.x - (canvas.width/(2*initialScale));
-        cameraX = runningCameraX + fraction*(fullFieldCameraX-runningCameraX);
-      } else if(gameState==="thrown") {
+        cameraX = player.x - (canvas.width / (2 * finalScale));
+      } else if (gameState === "aiming") {
+        let elapsed = performance.now() - aimTransitionStartTime;
+        let fraction = Math.min(elapsed / aimTransitionDuration, 1);
+        scale = finalScale + fraction * (aimingScale - finalScale);
+        cameraX = player.x - (canvas.width / (2 * scale));
+      } else if (gameState === "flightZoomOut") {
+        let elapsed = performance.now() - flightTransitionStartTime;
+        let fraction = Math.min(elapsed / flightTransitionDuration, 1);
+        scale = finalScale + fraction * (initialScale - finalScale);
+        let runningCameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
+        let fullFieldCameraX = javelin.x - (canvas.width / (2 * initialScale));
+        cameraX = runningCameraX + fraction * (fullFieldCameraX - runningCameraX);
+      } else if (gameState === "thrown") {
         scale = initialScale;
-        cameraX = javelin.x - (canvas.width/(2*initialScale));
-      } else if(gameState==="landingZoomIn") {
-        let elapsed = performance.now()-landingTransitionStartTime;
-        let fraction = Math.min(elapsed/landingTransitionDurationIn,1);
-        scale = landingZoomStartScale + fraction*(finalScale-landingZoomStartScale);
-        cameraX = landingZoomStartCameraX + fraction*(landingCameraX-landingZoomStartCameraX);
-      } else if(gameState==="landed") {
+        cameraX = javelin.x - (canvas.width / (2 * initialScale));
+      } else if (gameState === "landingZoomIn") {
+        let elapsed = performance.now() - landingTransitionStartTime;
+        let fraction = Math.min(elapsed / landingTransitionDurationIn, 1);
+        scale = landingZoomStartScale + fraction * (finalScale - landingZoomStartScale);
+        cameraX = landingZoomStartCameraX + fraction * (landingCameraX - landingZoomStartCameraX);
+      } else if (gameState === "landed") {
         scale = finalScale;
         cameraX = landingCameraX;
-      } else if(gameState==="foul") {
+      } else if (gameState === "foul") {
         scale = finalScale;
-        cameraX = frozenPlayerX - (canvas.width/(2*finalScale));
+        cameraX = frozenPlayerX - (canvas.width / (2 * finalScale));
       }
       return { scale, cameraX };
     }
@@ -232,8 +235,8 @@
     function worldToScreen(x, y) {
       const { scale, cameraX } = getCameraAndScale();
       return {
-        screenX: (x - cameraX)*scale,
-        screenY: canvas.height - bottomMargin - y*scale
+        screenX: (x - cameraX) * scale,
+        screenY: canvas.height - bottomMargin - y * scale
       };
     }
     
@@ -274,12 +277,12 @@
     function drawTree(x, groundY, treeScale, trunkColor, foliageColor) {
       const trunkWidth = 0.2 * treeScale;
       const trunkHeight = 1.0 * treeScale;
-      const trunkX = x - trunkWidth/2;
+      const trunkX = x - trunkWidth / 2;
       const trunkY = groundY;
       let trunkScr = worldToScreen(trunkX, trunkY);
       const { scale } = getCameraAndScale();
       ctx.fillStyle = trunkColor;
-      ctx.fillRect(trunkScr.screenX, trunkScr.screenY - trunkHeight*scale, trunkWidth*scale, trunkHeight*scale);
+      ctx.fillRect(trunkScr.screenX, trunkScr.screenY - trunkHeight * scale, trunkWidth * scale, trunkHeight * scale);
       
       const foliageRadius = 0.5 * treeScale;
       const foliageX = x;
@@ -287,7 +290,7 @@
       let foliageScr = worldToScreen(foliageX, foliageY);
       ctx.fillStyle = foliageColor;
       ctx.beginPath();
-      ctx.arc(foliageScr.screenX, foliageScr.screenY, foliageRadius*scale, 0, Math.PI*2);
+      ctx.arc(foliageScr.screenX, foliageScr.screenY, foliageRadius * scale, 0, Math.PI * 2);
       ctx.fill();
     }
     
@@ -298,7 +301,7 @@
       ctx.font = "12px Arial";
       let startMark = Math.ceil(cameraX/5)*5;
       let endMark = Math.floor((cameraX+canvas.width/scale)/5)*5;
-      for(let m = startMark; m<=endMark; m+=5) {
+      for (let m = startMark; m <= endMark; m += 5) {
         let xPos = (m - cameraX)*scale;
         ctx.beginPath();
         ctx.moveTo(xPos, canvas.height-bottomMargin);
@@ -342,9 +345,9 @@
       let v = Math.sqrt(vx*vx+vy*vy);
       if(v>0) {
         let dragForce = 0.5 * airDensity * v*v * dragCoefficient * javelinArea;
-        let dragAccel = dragForce/javelinMass;
-        let dragAx = -dragAccel*(vx/v);
-        let dragAy = -dragAccel*(vy/v);
+        let dragAccel = dragForce / javelinMass;
+        let dragAx = -dragAccel * (vx/v);
+        let dragAy = -dragAccel * (vy/v);
         javelin.vx += dragAx*dt;
         javelin.vy += dragAy*dt;
       }
@@ -354,31 +357,30 @@
     }
     
     // === Draw Detailed Runner ===
-    // This function draws a more detailed runner using filled shapes.
-    // The runner has:
-    // - A gradient-filled head.
-    // - A filled torso (trapezoid).
-    // - Detailed arms: the right arm is extended forward, and the left (throwing) arm is drawn with a natural bend that adjusts with the aim angle.
-    // - Legs are drawn as filled shapes.
-    // It returns the left-hand (throwing hand) final position (in world coordinates) for javelin attachment.
+    // This runner is drawn with filled shapes for a more realistic, thick-figured look.
+    // The head is drawn as a gradient-filled circle.
+    // The torso is a filled trapezoid.
+    // Arms and legs are drawn as filled polygons so they appear attached.
+    // The left arm (throwing arm) bend adjusts slightly based on the aim angle.
+    // Returns the final left-hand position (world coordinates) for attaching the javelin.
     function drawRunner(x, scale, time, aiming, aimAngle) {
-      // Draw head as gradient circle
+      // Head: gradient-filled circle.
       const headCenter = { x: x, y: 1.8 };
-      const headRadius = 0.25;
+      const headRadius = 0.3;
       let headScr = worldToScreen(headCenter.x, headCenter.y);
-      let headGrad = ctx.createRadialGradient(headScr.screenX, headScr.screenY, headRadius*scale*0.5, headScr.screenX, headScr.screenY, headRadius*scale);
-      headGrad.addColorStop(0, "#ffe0bd");
-      headGrad.addColorStop(1, "#f1c27d");
-      ctx.fillStyle = headGrad;
+      let grad = ctx.createRadialGradient(headScr.screenX, headScr.screenY, headRadius*scale*0.5, headScr.screenX, headScr.screenY, headRadius*scale);
+      grad.addColorStop(0, "#ffe0bd");
+      grad.addColorStop(1, "#f1c27d");
+      ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(headScr.screenX, headScr.screenY, headRadius*scale, 0, Math.PI*2);
       ctx.fill();
       
-      // Draw torso as a trapezoid
-      let torsoTopLeft = worldToScreen(x - 0.15, 1.5);
-      let torsoTopRight = worldToScreen(x + 0.15, 1.5);
-      let torsoBottomRight = worldToScreen(x + 0.1, 1.0);
-      let torsoBottomLeft = worldToScreen(x - 0.1, 1.0);
+      // Torso: draw a trapezoid.
+      let torsoTopLeft = worldToScreen(x - 0.2, 1.5);
+      let torsoTopRight = worldToScreen(x + 0.2, 1.5);
+      let torsoBottomRight = worldToScreen(x + 0.15, 1.0);
+      let torsoBottomLeft = worldToScreen(x - 0.15, 1.0);
       ctx.fillStyle = "#003399";
       ctx.beginPath();
       ctx.moveTo(torsoTopLeft.screenX, torsoTopLeft.screenY);
@@ -388,35 +390,34 @@
       ctx.closePath();
       ctx.fill();
       
-      // Arms
-      // Right arm (front): extended from right shoulder at (x+0.15, 1.5)
-      let rightShoulder = { x: x+0.15, y: 1.5 };
-      let rightHand = { x: rightShoulder.x + 0.5, y: 1.5 - 0.1 };
+      // Arms:
+      // Right arm (front arm): extended from right shoulder.
+      let rightShoulder = { x: x + 0.2, y: 1.5 };
+      let rightHand = { x: rightShoulder.x + 0.5, y: rightShoulder.y - 0.15 };
       let rShoulderScr = worldToScreen(rightShoulder.x, rightShoulder.y);
       let rHandScr = worldToScreen(rightHand.x, rightHand.y);
       ctx.fillStyle = "#ffe0bd";
       ctx.beginPath();
       ctx.moveTo(rShoulderScr.screenX, rShoulderScr.screenY);
-      ctx.lineTo(rShoulderScr.screenX+5, rShoulderScr.screenY);
-      ctx.lineTo(rHandScr.screenX+5, rHandScr.screenY);
+      ctx.lineTo(rShoulderScr.screenX + 8, rShoulderScr.screenY);
+      ctx.lineTo(rHandScr.screenX + 8, rHandScr.screenY);
       ctx.lineTo(rHandScr.screenX, rHandScr.screenY);
       ctx.closePath();
       ctx.fill();
       
-      // Left arm (throwing arm): attached at left shoulder at (x-0.15, 1.5)
-      let leftShoulder = { x: x-0.15, y: 1.5 };
-      // Adjust elbow bend based on aimAngle:
-      // We'll interpolate between two preset elbow positions.
-      let elbowLessBent = { x: leftShoulder.x - 0.2, y: leftShoulder.y - 0.1 };
-      let elbowMoreBent = { x: leftShoulder.x - 0.35, y: leftShoulder.y - 0.35 };
-      // Interpolate based on normalized aim angle (0 at minAngle, 1 at maxAngle)
-      let bendFactor = (aimAngle - minAngle)/(maxAngle - minAngle);
+      // Left arm (throwing arm): attached at left shoulder.
+      let leftShoulder = { x: x - 0.2, y: 1.5 };
+      // For a natural bend, we interpolate the elbow position based on the aim angle.
+      // When aimAngle is at minAngle, use a "less bent" position; at maxAngle, use a "more bent" position.
+      let elbowLessBent = { x: leftShoulder.x - 0.25, y: leftShoulder.y - 0.15 };
+      let elbowMoreBent = { x: leftShoulder.x - 0.4, y: leftShoulder.y - 0.4 };
+      let bendFactor = (aimAngle - minAngle) / (maxAngle - minAngle);
       let leftElbow = {
-        x: elbowLessBent.x + (elbowMoreBent.x - elbowLessBent.x)*bendFactor,
-        y: elbowLessBent.y + (elbowMoreBent.y - elbowLessBent.y)*bendFactor
+        x: elbowLessBent.x + (elbowMoreBent.x - elbowLessBent.x) * bendFactor,
+        y: elbowLessBent.y + (elbowMoreBent.y - elbowLessBent.y) * bendFactor
       };
-      // Hand position: from elbow, extend further in the direction of the throw.
-      let handOffset = 0.25;
+      // Hand position: from elbow, extend in the direction of the throw (mirrored for left side).
+      let handOffset = 0.3;
       let leftHandFinal = {
         x: leftElbow.x - handOffset * Math.cos(aimAngle),
         y: leftElbow.y - handOffset * Math.sin(aimAngle)
@@ -433,32 +434,32 @@
       ctx.closePath();
       ctx.fill();
       
-      // Legs: Draw as filled rectangles (simulate shorts)
+      // Legs: Draw thicker legs as filled rectangles (simulate shorts).
       let hip = { x: x, y: 1.0 };
       let hipScr = worldToScreen(hip.x, hip.y);
-      let legWidth = 0.15;
-      let rightLegEnd = { x: x+0.2* Math.sin(time*8), y: 0 };
-      let leftLegEnd = { x: x-0.2* Math.sin(time*8), y: 0 };
+      let legWidth = 0.2;
+      let rightLegEnd = { x: x + 0.2 * Math.sin(time * 8), y: 0 };
+      let leftLegEnd = { x: x - 0.2 * Math.sin(time * 8), y: 0 };
       let rLegScr = worldToScreen(rightLegEnd.x, rightLegEnd.y);
       let lLegScr = worldToScreen(leftLegEnd.x, leftLegEnd.y);
       ctx.fillStyle = "#000";
       ctx.beginPath();
-      ctx.moveTo(hipScr.screenX - legWidth, hipScr.screenY);
-      ctx.lineTo(hipScr.screenX + legWidth, hipScr.screenY);
-      ctx.lineTo(rLegScr.screenX + legWidth, rLegScr.screenY);
-      ctx.lineTo(rLegScr.screenX - legWidth, rLegScr.screenY);
+      ctx.moveTo(hipScr.screenX - legWidth*scale, hipScr.screenY);
+      ctx.lineTo(hipScr.screenX + legWidth*scale, hipScr.screenY);
+      ctx.lineTo(rLegScr.screenX + legWidth*scale, rLegScr.screenY);
+      ctx.lineTo(rLegScr.screenX - legWidth*scale, rLegScr.screenY);
       ctx.closePath();
       ctx.fill();
       
       ctx.beginPath();
-      ctx.moveTo(hipScr.screenX - legWidth, hipScr.screenY);
-      ctx.lineTo(hipScr.screenX + legWidth, hipScr.screenY);
-      ctx.lineTo(lLegScr.screenX + legWidth, lLegScr.screenY);
-      ctx.lineTo(lLegScr.screenX - legWidth, lLegScr.screenY);
+      ctx.moveTo(hipScr.screenX - legWidth*scale, hipScr.screenY);
+      ctx.lineTo(hipScr.screenX + legWidth*scale, hipScr.screenY);
+      ctx.lineTo(lLegScr.screenX + legWidth*scale, lLegScr.screenY);
+      ctx.lineTo(lLegScr.screenX - legWidth*scale, lLegScr.screenY);
       ctx.closePath();
       ctx.fill();
       
-      return leftHandFinal; // Return left hand position for javelin attachment.
+      return leftHandFinal; // Return left-hand position for javelin attachment.
     }
     
     // === Draw Javelin Attached to Runner's Hand ===
@@ -468,18 +469,18 @@
       ctx.translate(posScr.screenX, posScr.screenY);
       ctx.rotate(-angle);
       ctx.strokeStyle = "black";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(0,0);
-      ctx.lineTo(javelinLength*scale, 0);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(javelinLength * scale, 0);
       ctx.stroke();
       ctx.restore();
     }
     
     // === Draw Power Meter (Vertical Progress Bar) ===
     function drawPowerMeter() {
-      if(gameState==="aiming") {
-        let powerFactor = Math.min(holdDuration, maxHoldTime)/maxHoldTime;
+      if (gameState === "aiming") {
+        let powerFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
         let meterX = 10;
         let meterY = canvas.height - bottomMargin - 120;
         let meterWidth = 20;
@@ -487,7 +488,7 @@
         ctx.fillStyle = "grey";
         ctx.fillRect(meterX, meterY, meterWidth, meterHeight);
         ctx.fillStyle = "yellow";
-        ctx.fillRect(meterX, meterY+meterHeight*(1-powerFactor), meterWidth, meterHeight*powerFactor);
+        ctx.fillRect(meterX, meterY + meterHeight * (1 - powerFactor), meterWidth, meterHeight * powerFactor);
         ctx.strokeStyle = "black";
         ctx.lineWidth = 2;
         ctx.strokeRect(meterX, meterY, meterWidth, meterHeight);
@@ -497,12 +498,11 @@
     // === Main Game Loop ===
     let lastTime = 0;
     function gameLoop(timestamp) {
-      if(!lastTime) lastTime = timestamp;
-      const dt = (timestamp - lastTime)/1000;
+      if (!lastTime) lastTime = timestamp;
+      const dt = (timestamp - lastTime) / 1000;
       lastTime = timestamp;
       
       runnerTime += dt;
-      
       update(dt);
       draw();
       
@@ -513,51 +513,52 @@
     
     // === Update Game State ===
     function update(dt) {
-      if(gameState==="startTransition") {
-        let elapsed = performance.now()-transitionStartTime;
-        if(elapsed>=startTransitionDuration) {
-          gameState="running";
+      if (gameState === "startTransition") {
+        let elapsed = performance.now() - transitionStartTime;
+        if (elapsed >= startTransitionDuration) {
+          gameState = "running";
         }
       }
       
-      if(gameState==="running" || gameState==="aiming") {
-        player.x += playerSpeed*dt;
-        if(player.x>foulLineX) {
-          gameState="foul";
-          resultText="Foul! You crossed the line without throwing. Press R to restart.";
+      if (gameState === "running" || gameState === "aiming") {
+        player.x += playerSpeed * dt;
+        if (player.x > foulLineX) {
+          gameState = "foul";
+          resultText = "Foul! You crossed the line without throwing. Press R to restart.";
         }
-        if(gameState==="aiming" && spacePressed) {
-          holdDuration = performance.now()-holdStartTime;
+        if (gameState === "aiming" && spacePressed) {
+          holdDuration = performance.now() - holdStartTime;
         }
       }
       
-      if(gameState==="flightZoomOut" || gameState==="thrown" || gameState==="landingZoomIn") {
+      if (gameState === "flightZoomOut" || gameState === "thrown" || gameState === "landingZoomIn") {
         updateJavelinPhysics(dt);
-        if(javelin.y<=0) {
+        if (javelin.y <= 0) {
+          // Use the approach angle so javelin sticks based on its approach.
           finalAngle = Math.atan2(-javelin.vy, javelin.vx);
           javelin.y = 0;
           javelin.vx = 0;
           javelin.vy = 0;
-          if(gameState!=="landingZoomIn") {
+          if (gameState !== "landingZoomIn") {
             landingZoomStartScale = initialScale;
-            landingZoomStartCameraX = javelin.x - (canvas.width/(2*initialScale));
-            landingCameraX = javelin.x - (canvas.width/(2*finalScale));
-            gameState="landingZoomIn";
+            landingZoomStartCameraX = javelin.x - (canvas.width / (2 * initialScale));
+            landingCameraX = javelin.x - (canvas.width / (2 * finalScale));
+            gameState = "landingZoomIn";
             landingTransitionStartTime = performance.now();
           }
         }
-        if(gameState==="flightZoomOut") {
-          let elapsed = performance.now()-flightTransitionStartTime;
-          if(elapsed>=flightTransitionDuration) {
-            gameState="thrown";
+        if (gameState === "flightZoomOut") {
+          let elapsed = performance.now() - flightTransitionStartTime;
+          if (elapsed >= flightTransitionDuration) {
+            gameState = "thrown";
           }
         }
       }
       
-      if(gameState==="landingZoomIn") {
-        let elapsed = performance.now()-landingTransitionStartTime;
-        if(elapsed>=landingTransitionDurationIn) {
-          gameState="landed";
+      if (gameState === "landingZoomIn") {
+        let elapsed = performance.now() - landingTransitionStartTime;
+        if (elapsed >= landingTransitionDurationIn) {
+          gameState = "landed";
           let score = Math.floor(javelin.x - frozenPlayerX);
           resultText = "Score: " + score + " m. Press R to restart.";
         }
@@ -567,53 +568,54 @@
     // === Draw Everything ===
     function draw() {
       const { scale, cameraX } = getCameraAndScale();
-      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Draw sky.
-      let skyGradient = ctx.createLinearGradient(0,0,0,canvas.height);
-      skyGradient.addColorStop(0,"#87CEEB");
-      skyGradient.addColorStop(1,"#B0E0E6");
+      // Draw sky
+      let skyGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      skyGradient.addColorStop(0, "#87CEEB");
+      skyGradient.addColorStop(1, "#B0E0E6");
       ctx.fillStyle = skyGradient;
-      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       
-      // Draw landscape.
+      // Draw landscape
       drawLandscape();
       
-      // Draw ground.
-      ctx.fillStyle="#228B22";
-      ctx.fillRect(0,canvas.height-bottomMargin,canvas.width,bottomMargin);
+      // Draw ground
+      ctx.fillStyle = "#228B22";
+      ctx.fillRect(0, canvas.height - bottomMargin, canvas.width, bottomMargin);
       
-      drawMeterMarkings(cameraX,scale);
+      drawMeterMarkings(cameraX, scale);
       
-      let foulScr = worldToScreen(foulLineX,0);
+      let foulScr = worldToScreen(foulLineX, 0);
       ctx.strokeStyle = "red";
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(foulScr.screenX,0);
-      ctx.lineTo(foulScr.screenX,canvas.height);
+      ctx.moveTo(foulScr.screenX, 0);
+      ctx.lineTo(foulScr.screenX, canvas.height);
       ctx.stroke();
       
-      // Draw power meter.
+      // Draw power meter
       drawPowerMeter();
       
-      // Draw runner with javelin if in running/aiming state.
-      if(gameState==="running" || gameState==="aiming") {
-        let currentAimAngle = (gameState==="aiming")
-          ? (minAngle + (maxAngle - minAngle)*Math.min(holdDuration, maxHoldTime)/maxHoldTime)
-          : ((20*Math.PI/180) + 0.2*Math.sin(runnerTime*8));
-        let leftHandPos = drawRunner(player.x, scale, runnerTime, gameState==="aiming", currentAimAngle);
+      // Draw runner with javelin if in running/aiming
+      if (gameState === "running" || gameState === "aiming") {
+        let currentAimAngle = (gameState === "aiming")
+          ? (minAngle + (maxAngle - minAngle) * Math.min(holdDuration, maxHoldTime) / maxHoldTime)
+          : ((20 * Math.PI / 180) + 0.2 * Math.sin(runnerTime * 8));
+        let leftHandPos = drawRunner(player.x, scale, runnerTime, gameState === "aiming", currentAimAngle);
         drawJavelinAtHand(leftHandPos, scale, currentAimAngle);
       }
       
-      // Draw javelin in flight or landed.
-      if(gameState==="flightZoomOut" || gameState==="thrown" || gameState==="landingZoomIn" || gameState==="landed") {
+      // Draw javelin (in flight or landed)
+      if (gameState === "flightZoomOut" || gameState === "thrown" ||
+          gameState === "landingZoomIn" || gameState === "landed") {
         let pos = worldToScreen(javelin.x, javelin.y);
         let angle;
-        if(gameState==="landed") {
+        if (gameState === "landed") {
           angle = finalAngle;
-          pos = { 
-            screenX: pos.screenX + 10*Math.sin(angle),
-            screenY: pos.screenY + 10*Math.cos(angle)
+          pos = {
+            screenX: pos.screenX + 10 * Math.sin(angle),
+            screenY: pos.screenY + 10 * Math.cos(angle)
           };
         } else {
           angle = Math.atan2(-javelin.vy, javelin.vx);
@@ -622,20 +624,20 @@
         ctx.translate(pos.screenX, pos.screenY);
         ctx.rotate(angle);
         ctx.strokeStyle = "black";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(0,0);
-        ctx.lineTo(javelinLength*scale, 0);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(javelinLength * scale, 0);
         ctx.stroke();
         ctx.restore();
       }
       
       drawDistanceIndicator();
       
-      if(gameState==="ready") {
-        ctx.strokeStyle="black";
-        ctx.lineWidth=2;
-        ctx.strokeRect(0,0,canvas.width,canvas.height);
+      if (gameState === "ready") {
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
       }
     }
     
