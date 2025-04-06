@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Arcade – Left Arm Bend & Vertical Stick</title>
+  <title>Javelin Throwing Arcade – Final Version</title>
   <style>
     body {
       margin: 0;
@@ -87,18 +87,17 @@
     const ctx = canvas.getContext('2d');
     
     const fieldWidth = 120;            // Field width in meters
-    const bottomMargin = 40;           // Bottom margin (pixels)
+    const bottomMargin = 40;           // Ground margin in pixels
     const initialScale = canvas.width / fieldWidth; // Full-field view (~6.67 px/m)
-    const finalScale = 50;             // Running view: 50 px/m
-    const aimingScale = 30;            // Aiming view: 30 px/m
+    const finalScale = 50;             // Running view (50 px/m)
+    const aimingScale = 30;            // Aiming view (30 px/m)
     
     const startTransitionDuration = 1000;
     const flightTransitionDuration = 1000;
     const landingTransitionDurationIn = 1000;
     const aimTransitionDuration = 500;
     
-    // Game States: "ready", "startTransition", "running", "aiming", "flightZoomOut",
-    // "thrown", "landingZoomIn", "landed", "foul"
+    // Game States: "ready", "startTransition", "running", "aiming", "flightZoomOut", "thrown", "landingZoomIn", "landed", "foul"
     let gameState = "ready";
     let resultText = "Press the button or Space to start running.";
     
@@ -115,7 +114,8 @@
     // Physics parameters
     const gravity = -9.81;           // m/s² downward
     const playerSpeed = 7;           // m/s
-    const throwSpeed = 30;           // m/s
+    const throwSpeed = 30;           // base throw speed in m/s
+    const extraSpeed = 20;           // extra speed at max power (so max speed = 50 m/s)
     const minAngle = 20 * Math.PI / 180; // radians
     const maxAngle = 60 * Math.PI / 180; // radians
     const maxHoldTime = 2000;        // ms maximum for aiming
@@ -131,7 +131,7 @@
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
     const javelinLength = 1.2;       // m
     let frozenPlayerX = 0;           // Player's x at throw time
-    let finalAngle = -Math.PI/2;     // Final angle: set to vertical (almost) upon landing
+    let finalAngle = 0;              // Final javelin angle at impact
     
     // Input Variables
     let spacePressed = false;
@@ -156,13 +156,14 @@
     function releaseSpace() {
       if (gameState === "aiming" && spacePressed) {
         spacePressed = false;
-        let angleFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
-        let aimAngle = minAngle + (maxAngle - minAngle) * angleFactor;
-        // Set javelin initial conditions.
+        let powerFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+        let aimAngle = minAngle + (maxAngle - minAngle) * powerFactor;
+        // Increase throw speed based on power.
+        let actualThrowSpeed = throwSpeed + extraSpeed * powerFactor;
         javelin.x = player.x;
         javelin.y = player.y + 1.5; // approximate hand height
-        javelin.vx = playerSpeed + throwSpeed * Math.cos(aimAngle);
-        javelin.vy = throwSpeed * Math.sin(aimAngle);
+        javelin.vx = playerSpeed + actualThrowSpeed * Math.cos(aimAngle);
+        javelin.vy = actualThrowSpeed * Math.sin(aimAngle);
         frozenPlayerX = player.x;
         gameState = "flightZoomOut";
         flightTransitionStartTime = performance.now();
@@ -247,7 +248,6 @@
     function drawLandscape() {
       const { scale, cameraX } = getCameraAndScale();
       
-      // Draw several taller hills.
       const hills = [
         { xStart: 5, xEnd: 35, peakX: 20, peakY: 10, color: "#556B2F" },
         { xStart: 40, xEnd: 70, peakX: 55, peakY: 9, color: "#6B8E23" },
@@ -268,7 +268,6 @@
         ctx.fill();
       });
       
-      // Draw trees with varied sizes and colors.
       const trees = [
         { x: 15, scale: 1.0, trunkColor: "#8B4513", foliageColor: "#228B22" },
         { x: 30, scale: 0.8, trunkColor: "#A0522D", foliageColor: "#006400" },
@@ -320,8 +319,29 @@
       }
     }
     
+    // === Draw Power Meter (Vertical Progress Bar) ===
+    function drawPowerMeter() {
+      if (gameState === "aiming") {
+        let powerFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+        let meterX = 10;
+        let meterY = canvas.height - bottomMargin - 120;
+        let meterWidth = 20;
+        let meterHeight = 120;
+        // Draw background of the meter.
+        ctx.fillStyle = "grey";
+        ctx.fillRect(meterX, meterY, meterWidth, meterHeight);
+        // Draw the filled portion.
+        ctx.fillStyle = "yellow";
+        ctx.fillRect(meterX, meterY + meterHeight * (1 - powerFactor), meterWidth, meterHeight * powerFactor);
+        // Draw the border.
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(meterX, meterY, meterWidth, meterHeight);
+      }
+    }
+    
     // === Draw Distance Indicator (Sideways Red Raindrop) ===
-    // Before throw: shows meters remaining to foul line.
+    // Before throw: shows meters remaining to the foul line.
     // After throw: shows score (distance traveled from throw point).
     function drawDistanceIndicator() {
       let value, label;
@@ -367,28 +387,29 @@
       javelin.y += javelin.vy * dt;
     }
     
-    // === Draw the Runner (Enhanced with Bent Left Arm) ===
-    // The runner now uses his left arm (bent naturally) to hold the javelin,
-    // and his right arm is extended forward.
-    // Returns the final left-hand position (world coordinates) for attaching the javelin.
+    // === Draw the Runner (Enhanced Dashing Stick Figure with Bent Left Arm) ===
+    // The runner now:
+    // - Uses his left arm (throwing arm) which is drawn with a natural 90° bend.
+    // - Has his right arm extended forward.
+    // - Has all limbs attached properly.
+    // Returns the final left-hand position (world coordinates) where the javelin is attached.
     function drawRunner(x, scale, time, aiming, aimAngle) {
       const headRadius = 0.2;
       const headY = 1.8;  // Head center
       const bodyTopY = 1.5;
       const hipY = 1.0;
-      // Define shoulder positions: left shoulder for throwing, right shoulder for extended arm.
-      const shoulderOffset = 0.3; // positive for right shoulder; left shoulder will be x - shoulderOffset.
+      // Define shoulder positions:
+      const shoulderOffset = 0.3; // For left shoulder (throwing arm): x - shoulderOffset
       const hipOffset = 0.1;
       
-      // Draw head (centered above the body, can be drawn at x, headY).
+      // Draw head (separate circle) at center (x, headY)
       let headPos = worldToScreen(x, headY);
       ctx.fillStyle = "#ffe0bd";
       ctx.beginPath();
       ctx.arc(headPos.screenX, headPos.screenY, headRadius * scale, 0, Math.PI * 2);
       ctx.fill();
       
-      // Draw body: from a central shoulder point (average of shoulders) to hips.
-      // For simplicity, assume body top at (x, bodyTopY) and hip at (x, hipY) with slight lean.
+      // Draw body: a vertical line from (x, bodyTopY) to (x, hipY)
       let bodyTop = worldToScreen(x, bodyTopY);
       let bodyBottom = worldToScreen(x, hipY);
       ctx.strokeStyle = "#fff";
@@ -398,8 +419,7 @@
       ctx.lineTo(bodyBottom.screenX, bodyBottom.screenY);
       ctx.stroke();
       
-      // Draw arms.
-      // Right arm (front arm): extended forward.
+      // Draw right (front) arm: extended forward.
       let rightShoulder = { x: x + shoulderOffset, y: bodyTopY };
       let rightArmEnd = { x: rightShoulder.x + 0.4, y: bodyTopY - 0.1 };
       let rightShoulderScreen = worldToScreen(rightShoulder.x, rightShoulder.y);
@@ -409,60 +429,46 @@
       ctx.lineTo(rightArmEndScreen.screenX, rightArmEndScreen.screenY);
       ctx.stroke();
       
-      // Left arm (back arm, throwing arm): drawn with a natural 90° bend.
+      // Draw left (back/throwing) arm: with natural 90° bend.
       let leftShoulder = { x: x - shoulderOffset, y: bodyTopY };
-      // Use aimAngle (if aiming) for desired throw direction; otherwise, default.
+      // Use aimAngle (if aiming) for desired throw direction; else use a default.
       let defaultArmAngle = (20 * Math.PI / 180) + 0.2 * Math.sin(time * 8);
       let leftArmAngle = aiming ? aimAngle : defaultArmAngle;
-      // For left arm, since it's on the left side, mirror the angle:
-      // Desired fully extended hand position:
-      let handDesired = {
-        x: leftShoulder.x + (0.3 + 0.2) * Math.cos(Math.PI - leftArmAngle),
-        y: leftShoulder.y - (0.3 + 0.2) * Math.sin(Math.PI - leftArmAngle)
-      };
-      // Upper and lower arm lengths:
+      // For left arm, mirror the desired throw direction: desired direction = π - leftArmAngle.
+      let desiredAngle = Math.PI - leftArmAngle;
+      // Fixed lengths:
       const upperArmLength = 0.3;
       const lowerArmLength = 0.2;
-      // Compute elbow as intersection of two circles:
-      let dx = handDesired.x - leftShoulder.x;
-      let dy = handDesired.y - leftShoulder.y;
-      let d = Math.sqrt(dx*dx + dy*dy);
-      if(d === 0) d = 0.001;
-      let a = (upperArmLength*upperArmLength - lowerArmLength*lowerArmLength + d*d) / (2*d);
-      let h = Math.sqrt(Math.max(0, upperArmLength*upperArmLength - a*a));
-      let rx = dx/d, ry = dy/d;
-      let P = { x: leftShoulder.x + a*rx, y: leftShoulder.y + a*ry };
-      // Two possible elbow positions:
-      let E1 = { x: P.x - h*ry, y: P.y + h*rx };
-      let E2 = { x: P.x + h*ry, y: P.y - h*rx };
-      // Choose the elbow that is lower (greater y value) for a natural bend.
-      let leftElbow = (E1.y > E2.y) ? E1 : E2;
-      // Final hand position is along the line from leftElbow to handDesired, at distance lowerArmLength from leftElbow.
-      let EHdx = handDesired.x - leftElbow.x;
-      let EHdy = handDesired.y - leftElbow.y;
-      let EHd = Math.sqrt(EHdx*EHdx + EHdy*EHdy);
-      if(EHd === 0) EHd = 0.001;
+      // Compute the elbow position: For simplicity, we use a fixed bend—set the elbow at 45° offset from the desired direction.
+      // Upper arm angle: desiredAngle + 45° (i.e., add π/4)
+      let upperArmAngle = desiredAngle + Math.PI / 4;
+      let elbow = {
+        x: leftShoulder.x + upperArmLength * Math.cos(upperArmAngle),
+        y: leftShoulder.y - upperArmLength * Math.sin(upperArmAngle)
+      };
+      // Lower arm: extend from elbow at (upperArmAngle - 90°) for a natural bend.
+      let lowerArmAngle = upperArmAngle - Math.PI / 2;
       let leftHandFinal = {
-        x: leftElbow.x + lowerArmLength * (EHdx / EHd),
-        y: leftElbow.y + lowerArmLength * (EHdy / EHd)
+        x: elbow.x + lowerArmLength * Math.cos(lowerArmAngle),
+        y: elbow.y - lowerArmLength * Math.sin(lowerArmAngle)
       };
       
-      // Draw upper arm: from left shoulder to elbow.
+      // Draw upper arm.
       let leftShoulderScreen = worldToScreen(leftShoulder.x, leftShoulder.y);
-      let leftElbowScreen = worldToScreen(leftElbow.x, leftElbow.y);
+      let elbowScreen = worldToScreen(elbow.x, elbow.y);
       ctx.beginPath();
       ctx.moveTo(leftShoulderScreen.screenX, leftShoulderScreen.screenY);
-      ctx.lineTo(leftElbowScreen.screenX, leftElbowScreen.screenY);
+      ctx.lineTo(elbowScreen.screenX, elbowScreen.screenY);
       ctx.stroke();
       
-      // Draw lower arm: from elbow to final hand.
+      // Draw lower arm.
       let leftHandScreen = worldToScreen(leftHandFinal.x, leftHandFinal.y);
       ctx.beginPath();
-      ctx.moveTo(leftElbowScreen.screenX, leftElbowScreen.screenY);
+      ctx.moveTo(elbowScreen.screenX, elbowScreen.screenY);
       ctx.lineTo(leftHandScreen.screenX, leftHandScreen.screenY);
       ctx.stroke();
       
-      // Draw legs with pronounced swing.
+      // Draw legs.
       let hip = { x: x + hipOffset, y: hipY };
       let hipScreen = worldToScreen(hip.x, hip.y);
       const rightLegSwing = 0.6 * Math.sin(time * 8);
@@ -480,7 +486,6 @@
       ctx.lineTo(leftLegScreen.screenX, leftLegScreen.screenY);
       ctx.stroke();
       
-      // Return the final left-hand position for attaching the javelin.
       return leftHandFinal;
     }
     
@@ -497,6 +502,69 @@
       ctx.lineTo(javelinLength * scale, 0);
       ctx.stroke();
       ctx.restore();
+    }
+    
+    // === Draw Power Meter (Vertical Progress Bar) ===
+    function drawPowerMeter() {
+      if (gameState === "aiming") {
+        let powerFactor = Math.min(holdDuration, maxHoldTime) / maxHoldTime;
+        let meterX = 10;
+        let meterY = canvas.height - bottomMargin - 120;
+        let meterWidth = 20;
+        let meterHeight = 120;
+        ctx.fillStyle = "grey";
+        ctx.fillRect(meterX, meterY, meterWidth, meterHeight);
+        ctx.fillStyle = "yellow";
+        ctx.fillRect(meterX, meterY + meterHeight * (1 - powerFactor), meterWidth, meterHeight * powerFactor);
+        ctx.strokeStyle = "black";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(meterX, meterY, meterWidth, meterHeight);
+      }
+    }
+    
+    // === Draw Distance Indicator (Sideways Red Raindrop) ===
+    function drawDistanceIndicator() {
+      let value, label;
+      if (gameState === "running" || gameState === "aiming" || gameState === "ready") {
+        value = Math.floor(foulLineX - player.x);
+        label = "To Foul: ";
+      } else {
+        value = Math.floor(javelin.x - frozenPlayerX);
+        label = "Score: ";
+      }
+      const dropWidth = 60, dropHeight = 30;
+      const dropX = canvas.width - dropWidth - 20, dropY = 20;
+      
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+      ctx.moveTo(dropX, dropY + dropHeight / 2);
+      ctx.quadraticCurveTo(dropX + dropWidth, dropY, dropX + dropWidth, dropY + dropHeight / 2);
+      ctx.quadraticCurveTo(dropX + dropWidth, dropY + dropHeight, dropX, dropY + dropHeight / 2);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.fillStyle = "white";
+      ctx.font = "bold 16px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label + value + " m", dropX + dropWidth / 2, dropY + dropHeight / 2);
+    }
+    
+    // === Realistic Javelin Physics Update Function ===
+    function updateJavelinPhysics(dt) {
+      let vx = javelin.vx, vy = javelin.vy;
+      let v = Math.sqrt(vx * vx + vy * vy);
+      if (v > 0) {
+        let dragForce = 0.5 * airDensity * v * v * dragCoefficient * javelinArea;
+        let dragAccel = dragForce / javelinMass;
+        let dragAx = -dragAccel * (vx / v);
+        let dragAy = -dragAccel * (vy / v);
+        javelin.vx += dragAx * dt;
+        javelin.vy += dragAy * dt;
+      }
+      javelin.vy += gravity * dt;
+      javelin.x += javelin.vx * dt;
+      javelin.y += javelin.vy * dt;
     }
     
     // === Main Game Loop ===
@@ -539,8 +607,8 @@
       if (gameState === "flightZoomOut" || gameState === "thrown" || gameState === "landingZoomIn") {
         updateJavelinPhysics(dt);
         if (javelin.y <= 0) {
-          // Set finalAngle to nearly vertical (based on throw angle if desired, here fixed to -π/2).
-          finalAngle = -Math.PI / 2;
+          // Compute the approach angle just before impact.
+          finalAngle = Math.atan2(-javelin.vy, javelin.vx);
           javelin.y = 0;
           javelin.vx = 0;
           javelin.vy = 0;
@@ -599,12 +667,15 @@
       ctx.lineTo(foulScreen.screenX, canvas.height);
       ctx.stroke();
       
-      // Draw runner and javelin if in running or aiming state.
+      // Draw power meter when aiming.
+      drawPowerMeter();
+      
+      // Draw runner with attached javelin if in running or aiming state.
       if (gameState === "running" || gameState === "aiming") {
         let currentAimAngle = (gameState === "aiming")
           ? (minAngle + (maxAngle - minAngle) * Math.min(holdDuration, maxHoldTime) / maxHoldTime)
           : ((20 * Math.PI / 180) + 0.2 * Math.sin(runnerTime * 8));
-        // Use the bent left arm for holding the javelin.
+        // Use left (throwing) arm.
         let leftHandPos = drawRunner(player.x, scale, runnerTime, gameState === "aiming", currentAimAngle);
         drawJavelinAtHand(leftHandPos, scale, currentAimAngle);
       }
@@ -616,7 +687,7 @@
         let angle;
         if (gameState === "landed") {
           angle = finalAngle;
-          // Offset so the javelin appears stuck.
+          // Offset so it appears to stick into the ground.
           pos = { 
             screenX: pos.screenX + 10 * Math.sin(angle), 
             screenY: pos.screenY + 10 * Math.cos(angle) 
