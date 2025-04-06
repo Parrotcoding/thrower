@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Javelin Throwing Arcade – Advanced Runner with Visible Hand</title>
+  <title>Javelin Throwing Arcade – Advanced Runner with Left Arm Throw</title>
   <style>
     body {
       margin: 0;
@@ -110,18 +110,18 @@
     const playerSpeed = 7;
     const throwSpeed = 20; // base throw speed in m/s
     const extraSpeedMax = 10; // extra speed up to 10 m/s
-    const minAngle = 20 * Math.PI/180;
-    const maxAngle = 60 * Math.PI/180;
+    const minAngle = 20 * Math.PI / 180;
+    const maxAngle = 60 * Math.PI / 180;
     const maxHoldTime = 2000; // ms for full extra speed & angle interpolation
     
-    // Drag parameters (increased air resistance)
+    // Drag parameters (more air resistance)
     const airDensity = 1.225;
     const dragCoefficient = 1.0;
     const javelinArea = 0.007;
     const javelinMass = 0.8;
     
     // World Objects
-    let player = { x: 0, y: 0 };      // player's foot contact point (y=0)
+    let player = { x: 0, y: 0 };      // player's foot contact point (y = 0)
     const foulLineX = 30;
     let javelin = { x: 0, y: 0, vx: 0, vy: 0 };
     const javelinLength = 1.2;
@@ -344,23 +344,24 @@
       let v = Math.sqrt(vx*vx+vy*vy);
       if(v>0) {
         let dragForce = 0.5 * airDensity * v*v * dragCoefficient * javelinArea;
-        let dragAccel = dragForce/javelinMass;
-        let dragAx = -dragAccel*(vx/v);
-        let dragAy = -dragAccel*(vy/v);
-        javelin.vx += dragAx*dt;
-        javelin.vy += dragAy*dt;
+        let dragAccel = dragForce / javelinMass;
+        let dragAx = -dragAccel * (vx/v);
+        let dragAy = -dragAccel * (vy/v);
+        javelin.vx += dragAx * dt;
+        javelin.vy += dragAy * dt;
       }
-      javelin.vy += gravity*dt;
-      javelin.x += javelin.vx*dt;
-      javelin.y += javelin.vy*dt;
+      javelin.vy += gravity * dt;
+      javelin.x += javelin.vx * dt;
+      javelin.y += javelin.vy * dt;
     }
     
-    // === Draw Detailed Runner with Left Arm as Non-Throwing Arm and Right Arm as Throwing Arm (Now Bent) ===
-    // In this version, we want the left arm (non-throwing) to be visible and the right arm to be the throwing arm.
-    // The right arm's bend is adjusted based on the aim angle.
-    // We return the right-hand final position for attaching the javelin.
+    // === Draw Detailed Runner with Left Arm as Throwing Arm ===
+    // The runner is drawn with a detailed, filled style.
+    // The torso is a filled trapezoid and the limbs are drawn as filled polygons.
+    // The left arm (throwing arm) bend is adjusted based on the aim angle.
+    // Returns the left-hand final position (world coordinates) for javelin attachment.
     function drawRunner(x, scale, time, aiming, aimAngle) {
-      // Draw head (gradient-filled)
+      // Head: gradient-filled circle.
       const headCenter = { x: x, y: 1.8 };
       const headRadius = 0.3;
       let headScr = worldToScreen(headCenter.x, headCenter.y);
@@ -372,7 +373,7 @@
       ctx.arc(headScr.screenX, headScr.screenY, headRadius*scale, 0, Math.PI*2);
       ctx.fill();
       
-      // Torso as trapezoid
+      // Torso: trapezoid.
       let torsoTopLeft = worldToScreen(x - 0.2, 1.5);
       let torsoTopRight = worldToScreen(x + 0.2, 1.5);
       let torsoBottomRight = worldToScreen(x + 0.15, 1.0);
@@ -386,45 +387,46 @@
       ctx.closePath();
       ctx.fill();
       
-      // Left arm (non-throwing): Extended naturally from left shoulder.
-      let leftShoulder = { x: x - 0.2, y: 1.5 };
-      let leftHand = { x: leftShoulder.x - 0.4, y: leftShoulder.y - 0.1 };
-      let lsScr = worldToScreen(leftShoulder.x, leftShoulder.y);
-      let lhScr = worldToScreen(leftHand.x, leftHand.y);
-      ctx.fillStyle = "#ffe0bd";
-      ctx.beginPath();
-      ctx.moveTo(lsScr.screenX, lsScr.screenY);
-      ctx.lineTo(lsScr.screenX - 8, lsScr.screenY);
-      ctx.lineTo(lhScr.screenX - 8, lhScr.screenY);
-      ctx.lineTo(lhScr.screenX, lhScr.screenY);
-      ctx.closePath();
-      ctx.fill();
-      
-      // Right arm (throwing arm): This arm is now bent.
+      // Arms:
+      // Right arm (non-throwing): drawn naturally from right shoulder.
       let rightShoulder = { x: x + 0.2, y: 1.5 };
-      // Two preset elbow positions for natural bend
-      let elbowLessBent = { x: rightShoulder.x + 0.25, y: rightShoulder.y - 0.15 };
-      let elbowMoreBent = { x: rightShoulder.x + 0.4, y: rightShoulder.y - 0.35 };
-      let bendFactor = (aimAngle - minAngle) / (maxAngle - minAngle);
-      let rightElbow = {
-        x: elbowLessBent.x + (elbowMoreBent.x - elbowLessBent.x) * bendFactor,
-        y: elbowLessBent.y + (elbowMoreBent.y - elbowLessBent.y) * bendFactor
-      };
-      // Right hand position: extend from elbow in the direction of the aim.
-      let handOffset = 0.3;
-      let rightHandFinal = {
-        x: rightElbow.x + handOffset * Math.cos(aimAngle),
-        y: rightElbow.y + handOffset * Math.sin(aimAngle)
-      };
+      let rightHand = { x: rightShoulder.x + 0.4, y: rightShoulder.y - 0.1 };
       let rsScr = worldToScreen(rightShoulder.x, rightShoulder.y);
-      let reScr = worldToScreen(rightElbow.x, rightElbow.y);
-      let rhScr = worldToScreen(rightHandFinal.x, rightHandFinal.y);
+      let rhScr = worldToScreen(rightHand.x, rightHand.y);
       ctx.fillStyle = "#ffe0bd";
       ctx.beginPath();
       ctx.moveTo(rsScr.screenX, rsScr.screenY);
-      ctx.lineTo(reScr.screenX, reScr.screenY);
+      ctx.lineTo(rsScr.screenX + 8, rsScr.screenY);
+      ctx.lineTo(rhScr.screenX + 8, rhScr.screenY);
       ctx.lineTo(rhScr.screenX, rhScr.screenY);
-      ctx.lineTo(rsScr.screenX, rsScr.screenY);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Left arm (throwing arm): attached at left shoulder.
+      let leftShoulder = { x: x - 0.2, y: 1.5 };
+      // Two preset elbow positions for a natural bend.
+      let elbowLessBent = { x: leftShoulder.x - 0.25, y: leftShoulder.y - 0.15 };
+      let elbowMoreBent = { x: leftShoulder.x - 0.4, y: leftShoulder.y - 0.35 };
+      let bendFactor = (aimAngle - minAngle) / (maxAngle - minAngle);
+      let leftElbow = {
+        x: elbowLessBent.x + (elbowMoreBent.x - elbowLessBent.x) * bendFactor,
+        y: elbowLessBent.y + (elbowMoreBent.y - elbowLessBent.y) * bendFactor
+      };
+      // Left hand: extend from elbow in the direction of the throw.
+      let handOffset = 0.3;
+      let leftHandFinal = {
+        x: leftElbow.x - handOffset * Math.cos(aimAngle),
+        y: leftElbow.y - handOffset * Math.sin(aimAngle)
+      };
+      let lsScr = worldToScreen(leftShoulder.x, leftShoulder.y);
+      let leScr = worldToScreen(leftElbow.x, leftElbow.y);
+      let lhScr = worldToScreen(leftHandFinal.x, leftHandFinal.y);
+      ctx.fillStyle = "#ffe0bd";
+      ctx.beginPath();
+      ctx.moveTo(lsScr.screenX, lsScr.screenY);
+      ctx.lineTo(leScr.screenX, leScr.screenY);
+      ctx.lineTo(lhScr.screenX, lhScr.screenY);
+      ctx.lineTo(lsScr.screenX, lsScr.screenY);
       ctx.closePath();
       ctx.fill();
       
@@ -453,23 +455,22 @@
       ctx.closePath();
       ctx.fill();
       
-      // Return the right-hand final position for javelin attachment.
-      return rightHandFinal;
+      // Return left-hand final position for javelin attachment.
+      return leftHandFinal;
     }
     
     // === Draw Javelin Attached to Runner's Hand ===
-    // Here we offset the javelin drawing a bit from the hand so the hand remains visible.
+    // Offset the javelin drawing from the hand so the hand remains visible.
     function drawJavelinAtHand(handPos, scale, angle) {
       let posScr = worldToScreen(handPos.x, handPos.y);
-      // Offset: draw the javelin starting 10 pixels in local coordinates.
-      const javelinStartOffset = 10;
+      const offset = 10; // pixel offset in local coordinates
       ctx.save();
       ctx.translate(posScr.screenX, posScr.screenY);
       ctx.rotate(-angle);
       ctx.strokeStyle = "black";
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.moveTo(javelinStartOffset, 0);
+      ctx.moveTo(offset, 0);
       ctx.lineTo(javelinLength * scale, 0);
       ctx.stroke();
       ctx.restore();
@@ -594,14 +595,14 @@
       // Draw power meter.
       drawPowerMeter();
       
-      // Draw runner and javelin if in running/aiming state.
+      // Draw runner and javelin if in running/aiming.
       if(gameState === "running" || gameState === "aiming") {
         let currentAimAngle = (gameState === "aiming")
           ? (minAngle + (maxAngle - minAngle) * Math.min(holdDuration, maxHoldTime) / maxHoldTime)
           : ((20 * Math.PI / 180) + 0.2 * Math.sin(runnerTime * 8));
-        // Use the detailed runner with the right arm as the throwing arm.
-        let rightHandPos = drawRunner(player.x, scale, runnerTime, gameState === "aiming", currentAimAngle);
-        drawJavelinAtHand(rightHandPos, scale, currentAimAngle);
+        // Use the detailed runner with left arm as the throwing arm.
+        let leftHandPos = drawRunner(player.x, scale, runnerTime, gameState === "aiming", currentAimAngle);
+        drawJavelinAtHand(leftHandPos, scale, currentAimAngle);
       }
       
       // Draw javelin in flight or landed.
